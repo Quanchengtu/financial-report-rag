@@ -53,6 +53,22 @@ def build_filing_urls(cik: str, accession_number: str, primary_document: str) ->
         "filing_document_url": filing_document_url
     }
 
+
+def fetch_filing_html(url: str) -> str:
+    """
+    根據 filing_document_url 抓取 SEC 原始 HTML 內容
+    """
+    headers = {
+        "User-Agent": SEC_USER_AGENT,
+        "Accept-Encoding": "gzip, deflate",
+        "Host": "www.sec.gov"
+    }
+
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    return response.text
+
+
 # 從 SEC submissions 裡，挑出最近幾筆指定類型的 filings，並整理成想要的特定格式
 def get_recent_filings(cik: str, forms=None, limit: int = 10) -> list:
     
