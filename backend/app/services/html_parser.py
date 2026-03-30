@@ -80,6 +80,9 @@ def extract_text_from_html(html: str) -> str:
 
     text = "\n".join(cleaned_lines)
 
+    # 將單一換行也適度轉成空格，避免句子被切得太碎
+    text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
+    
     # 壓縮多餘空白
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n\s*\n+", "\n\n", text)
