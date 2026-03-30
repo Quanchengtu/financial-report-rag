@@ -1,0 +1,33 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===== Virtual Environment =====
+.venv/
+venv/
+
+# ===== Environment Variables =====
+.env
+
+# ===== OS / Editor =====
+.DS_Store
+.vscode/
+
+# ===== Test / Coverage / Cache =====
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ===== Build / Packaging =====
+build/
+dist/
+*.egg-info/
+
+# ===== Project Data =====
+# 下載的財報、切 chunk 後的資料、向量索引暫存放處
+backend/data/
+
+# ===== Node =====
+node_modules/
