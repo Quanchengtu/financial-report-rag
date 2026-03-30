@@ -1,14 +1,17 @@
 import re
 from collections import Counter
 
+STOPWORDS = {
+    "the", "is", "are", "a", "an", "of", "to", "in", "on", "at", "for", "and",
+    "or", "but", "if", "then", "than", "with", "by", "as", "from", "that",
+    "this", "these", "those", "be", "been", "being", "was", "were", "it",
+    "its", "their", "his", "her", "them", "they", "we", "you", "he", "she",
+    "do", "does", "did", "have", "has", "had", "not", "no", "yes", "into",
+    "about", "over", "under", "after", "before", "during", "through", "such"
+}
+
 
 def normalize_text(text: str) -> str:
-    """
-    將文字轉成較適合比對的格式
-    1. 轉小寫
-    2. 移除多餘符號
-    3. 壓縮空白
-    """
     text = text.lower()
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text)
@@ -16,68 +19,120 @@ def normalize_text(text: str) -> str:
 
 
 def tokenize(text: str) -> list[str]:
-    """
-    將文字切成 tokens
-    """
     normalized = normalize_text(text)
     if not normalized:
         return []
-    return normalized.split()
+
+    return [
+        token for token in normalized.split()
+        if token not in STOPWORDS and len(token) > 1
+    ]
 
 
-def score_chunk(query_tokens: list[str], chunk: str) -> int:
-    """
-    根據 query tokens 對單一 chunk 做簡單計分
-    分數邏輯先保持簡單：
-    - token 出現一次加一次分
-    """
-    chunk_tokens = tokenize(chunk)
-    if not chunk_tokens:
+def get_query_phrases(question: str) -> list[str]:
+    tokens = tokenize(question)
+    if len(tokens) < 2:
+        return []
+    return [" ".join(tokens)]
+
+
+def count_phrase_occurrences(text: str, phrase: str) -> int:
+    if not text or not phrase:
         return 0
+    return len(re.findall(rf"\b{re.escape(phrase)}\b", text))
+
+
+def score_chunk(question: str, chunk_text: str, section_name: str | None = None) -> dict:
+    query_tokens = tokenize(question)
+    if not query_tokens:
+        return {"score": 0, "matched_terms": []}
+
+    chunk_normalized = normalize_text(chunk_text)
+    chunk_tokens = tokenize(chunk_text)
+    if not chunk_tokens:
+        return {"score": 0, "matched_terms": []}
 
     chunk_counter = Counter(chunk_tokens)
+    matched_terms = []
+    raw_score = 0
 
-    score = 0
     for token in query_tokens:
-        score += chunk_counter.get(token, 0)
+        freq = chunk_counter.get(token, 0)
+        if freq > 0:
+            raw_score += freq
+            matched_terms.append(token)
 
-    return score
+    query_phrases = get_query_phrases(question)
+    for phrase in query_phrases:
+        phrase_count = count_phrase_occurrences(chunk_normalized, phrase)
+        if phrase_count > 0:
+            raw_score += phrase_count * 4
+            matched_terms.append(phrase)
+
+    # section bonus
+    q = question.lower()
+    if section_name:
+        if "risk factor" in q and section_name == "item_1a_risk_factors":
+            raw_score += 8
+        elif "market risk" in q and section_name == "item_7a_market_risk":
+            raw_score += 8
+        elif "business" in q and section_name == "item_1_business":
+            raw_score += 6
+        elif "legal proceedings" in q and section_name == "item_3_legal_proceedings":
+            raw_score += 6
+
+    chunk_length = max(1, len(chunk_tokens))
+    density_bonus = min(3, int((raw_score / chunk_length) * 100))
+
+    return {
+        "score": raw_score + density_bonus,
+        "matched_terms": sorted(set(matched_terms))
+    }
 
 
 def retrieve_relevant_chunks(
     question: str,
-    chunks: list[str],
+    chunks: list[dict],
     top_k: int = 3
 ) -> list[dict]:
     """
-    從 chunks 中找出和問題最相關的前幾段
-    回傳格式包含：
-    - chunk_index
-    - score
-    - text
+    chunks 格式:
+    [
+      {
+        "chunk_index": 0,
+        "text": "...",
+        "section_name": "item_1a_risk_factors"
+      }
+    ]
     """
-    if not question:
-        return []
-
-    if not chunks:
-        return []
-
-    query_tokens = tokenize(question)
-    if not query_tokens:
+    if not question or not chunks or top_k <= 0:
         return []
 
     scored_chunks = []
 
-    for idx, chunk in enumerate(chunks):
-        score = score_chunk(query_tokens, chunk)
+    for chunk in chunks:
+        text = chunk.get("text", "")
+        section_name = chunk.get("section_name")
+        chunk_index = chunk.get("chunk_index")
 
-        if score > 0:
+        scored = score_chunk(
+            question=question,
+            chunk_text=text,
+            section_name=section_name
+        )
+
+        if scored["score"] > 0:
             scored_chunks.append({
-                "chunk_index": idx,
-                "score": score,
-                "text": chunk
+                "chunk_index": chunk_index,
+                "section_name": section_name,
+                "score": scored["score"],
+                "matched_terms": scored["matched_terms"],
+                "text": text
             })
 
-    scored_chunks.sort(key=lambda x: x["score"], reverse=True)
+    scored_chunks.sort(
+        key=lambda x: (x["score"], -x["chunk_index"]),
+        reverse=True
+    )
 
     return scored_chunks[:top_k]
