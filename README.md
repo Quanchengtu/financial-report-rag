@@ -188,7 +188,7 @@ python -m venv .venv
 ### 3. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r backend/requirements.txt
 ```
 
 ### 4. Configure environment variables
@@ -207,7 +207,8 @@ Why this is required:
 ### 5. Run the backend server
 
 ```bash
-uvicorn app.main:app --reload
+cd backend
+uvicorn main:app --reload
 ```
 
 Default local server:
