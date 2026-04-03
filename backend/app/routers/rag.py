@@ -5,6 +5,10 @@ from app.services.text_chunker import chunk_text
 from app.services.retriever import retrieve_relevant_chunks
 from app.services.section_parser import extract_sections, get_priority_sections_for_question
 
+from app.services.embedding_service import embed_text
+from app.services.vector_store import query_similar_chunks
+from app.services.indexing_service import index_filing
+
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 
@@ -73,6 +77,7 @@ def retrieve_from_filing(
         )
 
         return {
+            "mode": "rule_based",
             "cik": normalized_cik,
             "accession_number": accession_number,
             "primary_document": primary_document,
@@ -88,3 +93,91 @@ def retrieve_from_filing(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chunks: {str(e)}")
+    
+
+@router.post("/index")
+def index_filing_to_vector_db(
+    cik: str = Query(..., description="Company CIK"),
+    accession_number: str = Query(..., description="SEC accession number"),
+    primary_document: str = Query(..., description="Primary document file name"),
+    ticker: str | None = Query(None, description="Company ticker, e.g. NVDA"),
+    form_type: str | None = Query(None, description="Filing type, e.g. 10-K"),
+    filing_date: str | None = Query(None, description="Filing date, e.g. 2024-02-21")
+):
+    try:
+        result = index_filing(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document,
+            company_ticker=ticker,
+            form_type=form_type,
+            filing_date=filing_date
+        )
+
+        return {
+            "message": "Filing indexed successfully",
+            **result
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to index filing: {str(e)}")
+
+
+@router.get("/semantic-retrieve")
+def semantic_retrieve(
+    question: str = Query(..., description="User question"),
+    top_k: int = Query(5, ge=1, le=10, description="How many top chunks to return"),
+    cik: str | None = Query(None, description="Optional company CIK filter"),
+    ticker: str | None = Query(None, description="Optional ticker filter"),
+    form_type: str | None = Query(None, description="Optional form type filter")
+):
+    try:
+        query_embedding = embed_text(question)
+
+        where = {}
+
+        if cik:
+            where["cik"] = normalize_cik(cik)
+        if ticker:
+            where["ticker"] = ticker
+        if form_type:
+            where["form_type"] = form_type
+
+        if not where:
+            where = None
+
+        results = query_similar_chunks(
+            query_embedding=query_embedding,
+            top_k=top_k,
+            where=where
+        )
+
+        documents = results.get("documents", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+        ids = results.get("ids", [[]])[0]
+
+        formatted_results = []
+        for doc_id, doc, metadata, distance in zip(ids, documents, metadatas, distances):
+            formatted_results.append({
+                "id": doc_id,
+                "score": 1 - distance if distance is not None else None,
+                "text": doc,
+                "metadata": metadata
+            })
+
+        return {
+            "mode": "semantic",
+            "question": question,
+            "top_k": top_k,
+            "filters": {
+                "cik": cik,
+                "ticker": ticker,
+                "form_type": form_type
+            },
+            "matched_count": len(formatted_results),
+            "results": formatted_results
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to run semantic retrieval: {str(e)}")
