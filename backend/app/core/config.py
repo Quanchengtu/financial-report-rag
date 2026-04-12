@@ -8,9 +8,14 @@ SEC_USER_AGENT = os.getenv(
     "Quanchengtu; quanchengtu@gmail.com"
 )
 
+# EMBEDDING_MODEL_NAME = os.getenv(
+#     "EMBEDDING_MODEL_NAME",
+#     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# )
+
 EMBEDDING_MODEL_NAME = os.getenv(
     "EMBEDDING_MODEL_NAME",
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    "sentence-transformers/all-MiniLM-L6-v2"
 )
 
 CHROMA_PERSIST_DIR = os.getenv(

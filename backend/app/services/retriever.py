@@ -42,9 +42,48 @@ def count_phrase_occurrences(text: str, phrase: str) -> int:
     return len(re.findall(rf"\b{re.escape(phrase)}\b", text))
 
 
+def is_noisy_chunk(text: str) -> bool:
+    if not text or not text.strip():
+        return True
+
+    stripped = text.strip()
+    lower = stripped.lower()
+
+    # 太短通常是目錄、標題碎片
+    if len(stripped) < 80:
+        return True
+
+    noisy_patterns = [
+        r"table of contents",
+        r"item\s+1a\.\s+risk factors\s+\d+",
+        r"item\s+1b\.",
+        r"unresolved staff comments",
+        r"item\s+1c",
+        r"cybersecurity",
+    ]
+    for pattern in noisy_patterns:
+        if re.search(pattern, lower):
+            return True
+
+    # 數字比例過高，常是頁碼/表格/目錄片段
+    digit_count = sum(ch.isdigit() for ch in stripped)
+    if digit_count > 0 and digit_count / max(len(stripped), 1) > 0.15:
+        return True
+
+    # token 太少通常不是有效內容
+    tokens = tokenize(stripped)
+    if len(tokens) < 12:
+        return True
+
+    return False
+
+
 def score_chunk(question: str, chunk_text: str, section_name: str | None = None) -> dict:
     query_tokens = tokenize(question)
     if not query_tokens:
+        return {"score": 0, "matched_terms": []}
+
+    if is_noisy_chunk(chunk_text):
         return {"score": 0, "matched_terms": []}
 
     chunk_normalized = normalize_text(chunk_text)
@@ -69,7 +108,6 @@ def score_chunk(question: str, chunk_text: str, section_name: str | None = None)
             raw_score += phrase_count * 4
             matched_terms.append(phrase)
 
-    # section bonus
     q = question.lower()
     if section_name:
         if "risk factor" in q and section_name == "item_1a_risk_factors":
@@ -81,11 +119,22 @@ def score_chunk(question: str, chunk_text: str, section_name: str | None = None)
         elif "legal proceedings" in q and section_name == "item_3_legal_proceedings":
             raw_score += 6
 
+    # 對 cross-reference 型 chunk 扣分
+    lower_chunk = chunk_text.lower()
+    if "refer to" in lower_chunk:
+        raw_score -= 3
+    if "for a discussion of" in lower_chunk:
+        raw_score -= 3
+
     chunk_length = max(1, len(chunk_tokens))
     density_bonus = min(3, int((raw_score / chunk_length) * 100))
 
+    final_score = raw_score + density_bonus
+    if final_score < 0:
+        final_score = 0
+
     return {
-        "score": raw_score + density_bonus,
+        "score": final_score,
         "matched_terms": sorted(set(matched_terms))
     }
 
@@ -95,16 +144,6 @@ def retrieve_relevant_chunks(
     chunks: list[dict],
     top_k: int = 3
 ) -> list[dict]:
-    """
-    chunks 格式:
-    [
-      {
-        "chunk_index": 0,
-        "text": "...",
-        "section_name": "item_1a_risk_factors"
-      }
-    ]
-    """
     if not question or not chunks or top_k <= 0:
         return []
 

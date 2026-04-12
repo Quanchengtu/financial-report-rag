@@ -9,6 +9,9 @@ from app.services.embedding_service import embed_text
 from app.services.vector_store import query_similar_chunks
 from app.services.indexing_service import index_filing
 
+from app.services.answer_service import build_grounded_answer
+from app.services.hybrid_retrieval import hybrid_retrieve
+
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 
@@ -181,3 +184,140 @@ def semantic_retrieve(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to run semantic retrieval: {str(e)}")
+
+@router.get("/answer")
+def answer_question_from_filing(
+    cik: str = Query(..., description="Company CIK"),
+    accession_number: str = Query(..., description="SEC accession number"),
+    primary_document: str = Query(..., description="Primary document file name"),
+    question: str = Query(..., description="User question"),
+    top_k: int = Query(5, ge=1, le=10, description="How many top chunks to use"),
+    max_sentences: int = Query(4, ge=1, le=8, description="How many supporting sentences to use"),
+):
+    try:
+        normalized_cik = normalize_cik(cik)
+
+        urls = build_filing_urls(
+            cik=normalized_cik,
+            accession_number=accession_number,
+            primary_document=primary_document
+        )
+
+        html_content = fetch_filing_html(urls["filing_document_url"])
+        text_content = extract_text_from_html(html_content)
+
+        sections = extract_sections(text_content)
+        priority_sections = get_priority_sections_for_question(question)
+
+        selected_sections = []
+        if priority_sections and sections:
+            selected_sections = [
+                section for section in sections
+                if section["section_name"] in priority_sections
+            ]
+
+        chunk_records = []
+        chunk_index = 0
+
+        if selected_sections:
+            for section in selected_sections:
+                section_chunks = chunk_text(
+                    section["text"],
+                    chunk_size=800,
+                    overlap=100
+                )
+
+                for chunk in section_chunks:
+                    chunk_records.append({
+                        "chunk_index": chunk_index,
+                        "section_name": section["section_name"],
+                        "text": chunk
+                    })
+                    chunk_index += 1
+        else:
+            full_chunks = chunk_text(text_content, chunk_size=800, overlap=100)
+            for chunk in full_chunks:
+                chunk_records.append({
+                    "chunk_index": chunk_index,
+                    "section_name": None,
+                    "text": chunk
+                })
+                chunk_index += 1
+
+        retrieved_chunks = retrieve_relevant_chunks(
+            question=question,
+            chunks=chunk_records,
+            top_k=top_k
+        )
+
+        answer_result = build_grounded_answer(
+            question=question,
+            retrieved_chunks=retrieved_chunks,
+            max_sentences=max_sentences
+        )
+        
+
+        return {
+            "mode": "grounded_answer_v2",
+            "cik": normalized_cik,
+            "accession_number": accession_number,
+            "primary_document": primary_document,
+            "filing_document_url": urls["filing_document_url"],
+            "question": question,
+            "used_priority_sections": priority_sections,
+            "matched_count": len(retrieved_chunks),
+            "summary_answer": answer_result["summary_answer"],
+            "answer": answer_result["answer"],
+            "detected_topics": answer_result["detected_topics"],
+            "supporting_sentences": answer_result["supporting_sentences"],
+            "sources": answer_result["sources"]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to answer question: {str(e)}")
+    
+
+@router.get("/hybrid-answer")
+def hybrid_answer_question_from_filing(
+    cik: str = Query(..., description="Company CIK"),
+    accession_number: str = Query(..., description="SEC accession number"),
+    primary_document: str = Query(..., description="Primary document file name"),
+    question: str = Query(..., description="User question"),
+    top_k: int = Query(5, ge=1, le=10, description="How many top chunks to use"),
+    max_sentences: int = Query(4, ge=1, le=8, description="How many supporting sentences to use"),
+):
+    try:
+        retrieval_result = hybrid_retrieve(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document,
+            question=question,
+            top_k=top_k
+        )
+
+        retrieved_chunks = retrieval_result["results"]
+
+        answer_result = build_grounded_answer(
+            question=question,
+            retrieved_chunks=retrieved_chunks,
+            max_sentences=max_sentences
+        )
+
+        return {
+            "mode": "hybrid_grounded_answer_v2",
+            "cik": retrieval_result["cik"],
+            "accession_number": accession_number,
+            "primary_document": primary_document,
+            "filing_document_url": retrieval_result["filing_document_url"],
+            "question": question,
+            "used_priority_sections": retrieval_result["used_priority_sections"],
+            "matched_count": len(retrieved_chunks),
+            "summary_answer": answer_result["summary_answer"],
+            "answer": answer_result["answer"],
+            "detected_topics": answer_result["detected_topics"],
+            "supporting_sentences": answer_result["supporting_sentences"],
+            "sources": answer_result["sources"]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to run hybrid answer: {str(e)}")
