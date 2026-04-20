@@ -1,4 +1,4 @@
-# 之後一定需要一個「先建索引」的腳本，不然每次 query 都重新抓 SEC 會很慢。
+# We’ll eventually need a separate indexing script; otherwise, every query will re-fetch data from the SEC, which will be too slow.
 import sys
 import os
 
