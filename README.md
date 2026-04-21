@@ -59,19 +59,28 @@ backend/
 │   │   └── rag.py
 │   ├── schemas/
 │   │   └── sec.py
-│   ├── services/
-│   │   ├── html_parser.py
-│   │   ├── retriever.py
-│   │   ├── sec_client.py
-│   │   ├── section_parser.py
-│   │   └── text_chunker.py
-│   └── main.py
+│   ├── scripts/
+│   │   └── index_filing.py
+│   └── services/
+│       ├── __init__.py
+│       ├── answer_service.py
+│       ├── embedding_service.py
+│       ├── html_parser.py
+│       ├── hybrid_retrieval.py
+│       ├── indexing_service.py
+│       ├── retriever.py
+│       ├── sec_client.py
+│       ├── section_parser.py
+│       ├── text_chunker.py
+│       └── vector_store.py
+├── chroma_db/
+├── main.py
 ├── requirements.txt
 ├── .gitignore
 └── README.md
 
 ```
-### Getting Started
+## Getting Started
 
 ### 1. Clone the repository
 
@@ -99,7 +108,7 @@ python -m venv .venv
 ### 3. Install dependencies
 
 ```bash
-python -m pip install -r backend/requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### 4. Configure environment variables
@@ -114,7 +123,6 @@ SEC_USER_AGENT=Your Name; your_email@example.com
 ### 5. Run the backend server
 
 ```bash
-cd backend
 uvicorn main:app --reload
 ```
 
@@ -138,7 +146,7 @@ http://127.0.0.1:8000/docs
 
 Returns a simple message confirming that the backend is running.
 
-### Get company information
+### Company information
 
 **GET** `/company/{cik}`
 
@@ -148,7 +156,7 @@ Example:
 curl "http://127.0.0.1:8000/company/320193"
 ```
 
-### Get recent filings
+### Recent filings
 
 **GET** `/company/{cik}/filings`
 
@@ -160,8 +168,8 @@ Example:
 curl "http://127.0.0.1:8000/company/1045810/filings"
 ```
 
-### Inspect filing HTML / cleaned text / chunks
-
+### Filing Preview
+<!-- Inspect filing HTML / cleaned text / chunks -->
 **GET** `/filing/html`
 
 Query parameters:
@@ -176,8 +184,8 @@ Example:
 curl "http://127.0.0.1:8000/filing/html?cik=1045810&accession_number=0001045810-24-000029&primary_document=nvda-20240128.htm"
 ```
 
-### Retrieve relevant chunks for a question
-
+### Chunk Retrieval
+<!-- Retrieve relevant chunks for a question -->
 **GET** `/rag/retrieve`
 
 Query parameters:
@@ -221,4 +229,10 @@ Example retrieval response fields:
   ]
 }
 ```
+
+## Project Notes
+
+This project is currently focused on the backend side, especially SEC filing retrieval, text extraction, chunking, and basic retrieval testing.
+
+The current version is intended for inspection and backend experimentation, so the main goal is to make the pipeline clear and easy to test.
 
