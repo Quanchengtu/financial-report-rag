@@ -21,7 +21,7 @@ def get_filing_html(
             primary_document=primary_document
         )
 
-        html_content = fetch_filing_html(urls["filing_document_url"])
+        html_content = fetch_filing_html(urls["filing_document_url"]) # url是dict型態
         text_content = extract_text_from_html(html_content)
         chunks = chunk_text(text_content, chunk_size=800, overlap=100)
 
@@ -33,7 +33,7 @@ def get_filing_html(
             "html_length": len(html_content),
             "text_length": len(text_content),
             "chunk_count": len(chunks),
-            "html_preview": html_content[:1000],
+            "html_preview": html_content[:1000],  # 前1000字HTML預覽
             "text_preview": text_content[:2000],
             "chunk_preview": chunks[:3]
         }
