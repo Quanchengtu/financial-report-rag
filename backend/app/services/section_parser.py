@@ -2,7 +2,7 @@ import re
 
 
 SECTION_PATTERNS = [
-    ("item_1a_risk_factors", r"\bitem\s+1a\.?\s+risk\s+factors\b"),
+    ("item_1a_risk_factors", r"\bitem\s+1a\.?\s+risk\s+factors\b"),   # \b 單字邊界 \s+ 0個或多個空格
     ("item_1_business", r"\bitem\s+1\.?\s+business\b"),
     ("item_2_properties", r"\bitem\s+2\.?\s+properties\b"),
     ("item_3_legal_proceedings", r"\bitem\s+3\.?\s+legal\s+proceedings\b"),
@@ -13,17 +13,17 @@ SECTION_PATTERNS = [
 
 def normalize_for_section_search(text: str) -> str:
     """
-    給 section 標題搜尋用的簡化版本
+    給 section 標題搜尋用的簡化版本   
     """
     lowered = text.lower()
     lowered = lowered.replace("’", "'")
-    lowered = re.sub(r"\s+", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered)   # 多空格壓成一個空格
     return lowered
 
 
 def find_section_boundaries(text: str) -> list[dict]:
     """
-    找出文件中已知章節標題的大致位置
+    找出文件中已知章節標題的大致開始與結束位置
     回傳:
     [
       {"section_name": "...", "start": 1000, "end": 2500},
@@ -31,11 +31,11 @@ def find_section_boundaries(text: str) -> list[dict]:
     ]
     ]
     """
-    normalized = normalize_for_section_search(text)
-    matches = []
+    normalized = normalize_for_section_search(text)   # 將文字轉成較容易搜尋的格式
+    matches = []   # 存找到的章節標題位置
 
     for section_name, pattern in SECTION_PATTERNS:
-        for match in re.finditer(pattern, normalized):
+        for match in re.finditer(pattern, normalized):  # 在 normalized 這段文字裡面，用 pattern 這個 regex 規則去找"所有"符合的地方
             matches.append({
                 "section_name": section_name,
                 "start": match.start()
@@ -44,13 +44,13 @@ def find_section_boundaries(text: str) -> list[dict]:
     if not matches:
         return []
 
-    # 依出現位置排序
+    # 依start位置重新排序
     matches.sort(key=lambda x: x["start"])
 
-    sections = []
-    for i, match in enumerate(matches):
+    sections = []   # 可存section首尾位置（章節範圍）
+    for i, match in enumerate(matches):   # 決定每個 section 的 start 和 end
         start = match["start"]
-        end = matches[i + 1]["start"] if i + 1 < len(matches) else len(text)
+        end = matches[i + 1]["start"] if i + 1 < len(matches) else len(text)  # 一個章節的結束位置，就是下一個章節標題出現的位置
 
         sections.append({
             "section_name": match["section_name"],
@@ -76,7 +76,7 @@ def extract_sections(text: str) -> list[dict]:
     if not boundaries:
         return []
 
-    sections = []
+    sections = []   # 對比line 50 這裡存真正切出來的章節文字
     for item in boundaries:
         section_text = text[item["start"]:item["end"]].strip()
         if section_text:

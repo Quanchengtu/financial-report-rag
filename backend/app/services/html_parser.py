@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup  # 用於解析HTML
 import re  #  判斷某些文字是不是 XBRL 雜訊 ＆ 清理多餘空白、換行
 
 
-def is_probable_xbrl_line(line: str) -> bool:
+def is_probable_xbrl_line(line: str) -> bool:  # I. 刪 HTML tag 層級的 XBRL
     """
     判斷這一行是否像 XBRL / iXBRL 的雜訊，而不是正文 return true/false
     """
@@ -29,7 +29,7 @@ def is_probable_xbrl_line(line: str) -> bool:
     return False
 
 
-def extract_text_from_html(html: str) -> str:
+def extract_text_from_html(html: str) -> str:  # II. 刪純文字階段殘留的 XBRL
     """
     將 SEC filing HTML 清洗成較乾淨的純文字
     """
@@ -85,7 +85,7 @@ def extract_text_from_html(html: str) -> str:
     text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
     
     # 壓縮多餘空白
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    text = re.sub(r"[ \t]+", " ", text)  # 將連續空白或 tab 壓成一個空白
+    text = re.sub(r"\n\s*\n+", "\n\n", text)  # 將過多的空行壓成兩個換行 保留段落感但識度空行
 
     return text.strip()
