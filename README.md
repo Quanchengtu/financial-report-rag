@@ -235,4 +235,3 @@ Example retrieval response fields:
 This project is currently focused on the backend side, especially SEC filing retrieval, text extraction, chunking, and basic retrieval testing.
 
 The current version is intended for inspection and backend experimentation, so the main goal is to make the pipeline clear and easy to test.
-
