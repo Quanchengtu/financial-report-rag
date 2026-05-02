@@ -9,8 +9,10 @@ from app.services.embedding_service import embed_text
 from app.services.vector_store import query_similar_chunks
 from app.services.indexing_service import index_filing
 
-from app.services.answer_service import build_grounded_answer
+from app.services.answer_service import build_grounded_answer, build_llm_grounded_answer
 from app.services.hybrid_retrieval import hybrid_retrieve
+from app.services.llm_service import LLMServiceError
+from app.core.config import RAG_LLM_ENABLED, RAG_LLM_TEMPERATURE
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -193,6 +195,8 @@ def answer_question_from_filing(
     question: str = Query(..., description="User question"),
     top_k: int = Query(5, ge=1, le=10, description="How many top chunks to use"),
     max_sentences: int = Query(4, ge=1, le=8, description="How many supporting sentences to use"),
+    use_llm: bool = Query(True, description="Whether to use LLM answer generation"),
+    llm_temperature: float = Query(RAG_LLM_TEMPERATURE, ge=0.0, le=1.0, description="LLM temperature"),
 ):
     try:
         normalized_cik = normalize_cik(cik)
@@ -250,15 +254,38 @@ def answer_question_from_filing(
             top_k=top_k
         )
 
-        answer_result = build_grounded_answer(
-            question=question,
-            retrieved_chunks=retrieved_chunks,
-            max_sentences=max_sentences
-        )
-        
+        fallback_used = False
+        model = None
+        usage = {}
+
+        if use_llm and RAG_LLM_ENABLED:
+            try:
+                answer_result = build_llm_grounded_answer(
+                    question=question,
+                    retrieved_chunks=retrieved_chunks,
+                    temperature=llm_temperature,
+                )
+                model = answer_result.get("model")
+                usage = answer_result.get("usage", {})
+                mode = "llm_grounded_answer_v1"
+            except LLMServiceError:
+                fallback_used = True
+                answer_result = build_grounded_answer(
+                    question=question,
+                    retrieved_chunks=retrieved_chunks,
+                    max_sentences=max_sentences
+                )
+                mode = "grounded_answer_v2_fallback"
+        else:
+            answer_result = build_grounded_answer(
+                question=question,
+                retrieved_chunks=retrieved_chunks,
+                max_sentences=max_sentences
+            )
+            mode = "grounded_answer_v2"
 
         return {
-            "mode": "grounded_answer_v2",
+            "mode": mode,
             "cik": normalized_cik,
             "accession_number": accession_number,
             "primary_document": primary_document,
@@ -270,7 +297,10 @@ def answer_question_from_filing(
             "answer": answer_result["answer"],
             "detected_topics": answer_result["detected_topics"],
             "supporting_sentences": answer_result["supporting_sentences"],
-            "sources": answer_result["sources"]
+            "sources": answer_result["sources"],
+            "fallback_used": fallback_used,
+            "model": model,
+            "usage": usage
         }
 
     except Exception as e:
@@ -285,6 +315,8 @@ def hybrid_answer_question_from_filing(
     question: str = Query(..., description="User question"),
     top_k: int = Query(5, ge=1, le=10, description="How many top chunks to use"),
     max_sentences: int = Query(4, ge=1, le=8, description="How many supporting sentences to use"),
+    use_llm: bool = Query(True, description="Whether to use LLM answer generation"),
+    llm_temperature: float = Query(RAG_LLM_TEMPERATURE, ge=0.0, le=1.0, description="LLM temperature"),
 ):
     try:
         retrieval_result = hybrid_retrieve(
@@ -316,7 +348,10 @@ def hybrid_answer_question_from_filing(
             "answer": answer_result["answer"],
             "detected_topics": answer_result["detected_topics"],
             "supporting_sentences": answer_result["supporting_sentences"],
-            "sources": answer_result["sources"]
+            "sources": answer_result["sources"],
+            "fallback_used": fallback_used,
+            "model": model,
+            "usage": usage
         }
 
     except Exception as e:
