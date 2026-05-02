@@ -27,3 +27,17 @@ CHROMA_COLLECTION_NAME = os.getenv(
     "CHROMA_COLLECTION_NAME",
     "financial_filings"
 )
+
+LLM_MODEL_NAME = os.getenv(
+    "LLM_MODEL_NAME",
+    "gpt-4.1-mini"
+)
+
+LLM_BASE_URL = os.getenv(
+    "LLM_BASE_URL",
+    "https://api.openai.com/v1"
+)
+
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+
+LLM_API_TIMEOUT_SECONDS = int(os.getenv("LLM_API_TIMEOUT_SECONDS", "30"))
