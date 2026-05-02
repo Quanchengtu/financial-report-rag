@@ -41,3 +41,9 @@ LLM_BASE_URL = os.getenv(
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 
 LLM_API_TIMEOUT_SECONDS = int(os.getenv("LLM_API_TIMEOUT_SECONDS", "30"))
+
+
+RAG_LLM_ENABLED = os.getenv("RAG_LLM_ENABLED", "true").lower() == "true"
+RAG_LLM_TEMPERATURE = float(os.getenv("RAG_LLM_TEMPERATURE", "0.2"))
+RAG_LLM_MAX_CONTEXT_CHUNKS = int(os.getenv("RAG_LLM_MAX_CONTEXT_CHUNKS", "5"))
+RAG_LLM_MAX_CHARS_PER_CHUNK = int(os.getenv("RAG_LLM_MAX_CHARS_PER_CHUNK", "1200"))

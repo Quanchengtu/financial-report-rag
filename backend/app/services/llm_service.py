@@ -1,4 +1,5 @@
 import requests
+from requests import RequestException
 
 from app.core.config import (
     LLM_API_KEY,
@@ -48,24 +49,30 @@ def generate_answer(question: str, contexts: list[str], temperature: float = 0.2
     if not contexts:
         raise LLMServiceError("At least one context chunk is required.")
 
-    response = requests.post(
-        f"{LLM_BASE_URL.rstrip('/')}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {LLM_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": LLM_MODEL_NAME,
-            "messages": _build_messages(question=question, contexts=contexts),
-            "temperature": temperature,
-        },
-        timeout=LLM_API_TIMEOUT_SECONDS,
-    )
+    try:
+        response = requests.post(
+            f"{LLM_BASE_URL.rstrip('/')}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {LLM_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": LLM_MODEL_NAME,
+                "messages": _build_messages(question=question, contexts=contexts),
+                "temperature": temperature,
+            },
+            timeout=LLM_API_TIMEOUT_SECONDS,
+        )
+    except RequestException as exc:
+        raise LLMServiceError(f"LLM transport error: {exc}") from exc
 
     if response.status_code >= 400:
         raise LLMServiceError(f"LLM request failed: {response.status_code} {response.text}")
 
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise LLMServiceError("LLM response is not valid JSON.") from exc
     choices = payload.get("choices") or []
     if not choices:
         raise LLMServiceError("LLM response did not contain choices.")

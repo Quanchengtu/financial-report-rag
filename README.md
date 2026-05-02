@@ -248,3 +248,15 @@ LLM_MODEL_NAME=gpt-4.1-mini
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_TIMEOUT_SECONDS=30
 ```
+
+## Phase 2 Answer Flow (LLM + Fallback)
+
+`GET /rag/answer` now supports:
+
+- `use_llm` (default `true`)
+- `llm_temperature` (default from `RAG_LLM_TEMPERATURE`)
+
+Behavior:
+- When `use_llm=true` and LLM is enabled, the API tries LLM-grounded answer generation.
+- If LLM fails, the endpoint automatically falls back to the existing extractive answer logic.
+- Response now includes `fallback_used`, `model`, and `usage` fields.

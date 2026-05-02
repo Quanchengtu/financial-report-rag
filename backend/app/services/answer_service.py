@@ -1,3 +1,5 @@
+from app.core.config import RAG_LLM_MAX_CHARS_PER_CHUNK, RAG_LLM_MAX_CONTEXT_CHUNKS
+from app.services.llm_service import generate_answer, LLMServiceError
 import re
 from app.services.retriever import tokenize, normalize_text
 
@@ -316,4 +318,58 @@ def build_grounded_answer(
         "supporting_sentences": supporting_sentences,
         "sources": sources,
         "detected_topics": detected_topics
+    }
+
+
+def build_llm_grounded_answer(
+    question: str,
+    retrieved_chunks: list[dict],
+    max_context_chunks: int = RAG_LLM_MAX_CONTEXT_CHUNKS,
+    max_chars_per_chunk: int = RAG_LLM_MAX_CHARS_PER_CHUNK,
+    temperature: float = 0.2,
+) -> dict:
+    """Generate a grounded answer from retrieved chunks with LLM."""
+    if not retrieved_chunks:
+        raise LLMServiceError("No retrieved chunks were provided for LLM answer generation.")
+
+    contexts: list[str] = []
+    selected_chunks = retrieved_chunks[:max_context_chunks]
+
+    for chunk in selected_chunks:
+        text = (chunk.get("text") or "").strip()
+        if not text:
+            continue
+
+        section_name = chunk.get("section_name") or "unknown_section"
+        chunk_index = chunk.get("chunk_index")
+        chunk_label = f"{section_name}:{chunk_index}" if chunk_index is not None else section_name
+        contexts.append(f"Source={chunk_label}\n{text[:max_chars_per_chunk]}")
+
+    if not contexts:
+        raise LLMServiceError("Retrieved chunks did not include usable text contexts.")
+
+    llm_result = generate_answer(
+        question=question,
+        contexts=contexts,
+        temperature=temperature
+    )
+
+    sources = []
+    for rank, chunk in enumerate(selected_chunks, start=1):
+        sources.append({
+            "source_rank": rank,
+            "chunk_index": chunk.get("chunk_index"),
+            "section_name": chunk.get("section_name"),
+            "score": chunk.get("score"),
+            "text_excerpt": (chunk.get("text") or "")[:500]
+        })
+
+    return {
+        "answer": llm_result["answer"],
+        "summary_answer": llm_result["answer"],
+        "supporting_sentences": [],
+        "sources": sources,
+        "detected_topics": [],
+        "model": llm_result.get("model"),
+        "usage": llm_result.get("usage", {}),
     }
