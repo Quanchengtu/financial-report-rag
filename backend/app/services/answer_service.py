@@ -1,11 +1,12 @@
+# 將 retriever 找到的 chunks，整理成可回答使用者問題的答案
 from app.core.config import RAG_LLM_MAX_CHARS_PER_CHUNK, RAG_LLM_MAX_CONTEXT_CHUNKS
 from app.services.llm_service import generate_answer, LLMServiceError
-import re
-from app.services.retriever import tokenize, normalize_text
+import re   # Python 內建的正規表示式工具，用來切句子、過濾雜訊
+from app.services.retriever import tokenize, normalize_text   # 將問題和句子轉成較好比對的格式
 
 
 NOISY_SENTENCE_PATTERNS = [
-    r"^\s*item\s+\d+[a-z]?\b",
+    r"^\s*item\s+\d+[a-z]?\b",  # ^表開頭
     r"^\s*risk factors\s+\d+",
     r"table of contents",
     r"unresolved staff comments",
@@ -14,7 +15,7 @@ NOISY_SENTENCE_PATTERNS = [
     r"for a discussion of",
 ]
 
-
+# 若句子包含某些keywords，就自動歸類成某個topic
 TOPIC_RULES = [
     {
         "label": "changing industry demand",
@@ -53,18 +54,18 @@ TOPIC_RULES = [
 
 def split_into_sentences(text: str) -> list[str]:
     """
-    將文字粗略切成句子
+    將chunk文字粗略切成句子
     """
     if not text or not text.strip():
         return []
 
     text = re.sub(r"\s+", " ", text).strip()
-    sentences = re.split(r"(?<=[.!?])\s+", text)
+    sentences = re.split(r"(?<=[.!?])\s+", text)   # 根據.!?後的空白切割句子
 
     cleaned = []
     for sentence in sentences:
         sentence = sentence.strip()
-        if sentence:
+        if sentence:   # 頭尾空白清掉後若不是空字串就放入cleaned
             cleaned.append(sentence)
 
     return cleaned
@@ -72,7 +73,7 @@ def split_into_sentences(text: str) -> list[str]:
 
 def is_noisy_sentence(sentence: str) -> bool:
     """
-    過濾明顯不像答案內容的句子
+    過濾明顯不像答案內容的句子 判斷雜訊句子 避免 answer_service 把無意義的句子拿去組答案或引用來源
     """
     if not sentence or not sentence.strip():
         return True
@@ -84,7 +85,7 @@ def is_noisy_sentence(sentence: str) -> bool:
         return True
 
     digit_count = sum(ch.isdigit() for ch in s)
-    if digit_count > 0 and digit_count / max(len(s), 1) > 0.2:
+    if digit_count > 0 and digit_count / max(len(s), 1) > 0.2:   # 數字比例高的句子視為noisy_sentence
         return True
 
     for pattern in NOISY_SENTENCE_PATTERNS:
@@ -96,7 +97,7 @@ def is_noisy_sentence(sentence: str) -> bool:
 
 def score_sentence(question: str, sentence: str) -> int:
     """
-    計算單一句子和問題的相關程度
+    計算某單一句子和使用者問題的相關程度
     """
     question_tokens = tokenize(question)
     sentence_tokens = tokenize(sentence)
@@ -107,7 +108,7 @@ def score_sentence(question: str, sentence: str) -> int:
     score = 0
     sentence_token_set = set(sentence_tokens)
 
-    for token in question_tokens:
+    for token in question_tokens:   # 問題中的自若出現在句子中 分數+1
         if token in sentence_token_set:
             score += 1
 
@@ -141,7 +142,7 @@ def select_supporting_sentences(
     max_sentences: int = 4
 ) -> list[dict]:
     """
-    從 retrieved chunks 裡挑出最相關且比較像答案的句子
+    從 retrieved chunks 裡挑出最相關且比較像(最相關）答案的句子
     """
     candidates = []
 
