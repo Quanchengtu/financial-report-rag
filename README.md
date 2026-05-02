@@ -235,3 +235,16 @@ Example retrieval response fields:
 This project is currently focused on the backend side, especially SEC filing retrieval, text extraction, chunking, and basic retrieval testing.
 
 The current version is intended for inspection and backend experimentation, so the main goal is to make the pipeline clear and easy to test.
+
+## LLM Configuration (Phase 1)
+
+The project now includes an `llm_service.py` abstraction for chat-completions-compatible APIs.
+
+Add the following optional settings to `backend/.env` when enabling LLM answer generation:
+
+```env
+LLM_API_KEY=<your_api_key>
+LLM_MODEL_NAME=gpt-4.1-mini
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_TIMEOUT_SECONDS=30
+```
