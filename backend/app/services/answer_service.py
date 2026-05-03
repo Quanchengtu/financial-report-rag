@@ -3,6 +3,8 @@ from app.core.config import RAG_LLM_MAX_CHARS_PER_CHUNK, RAG_LLM_MAX_CONTEXT_CHU
 from app.services.llm_service import generate_answer, LLMServiceError
 import re   # Python 內建的正規表示式工具，用來切句子、過濾雜訊
 from app.services.retriever import tokenize, normalize_text   # 將問題和句子轉成較好比對的格式
+from app.services.embedding_service import embed_text
+import math
 
 
 NOISY_SENTENCE_PATTERNS = [
@@ -65,7 +67,7 @@ def split_into_sentences(text: str) -> list[str]:
     cleaned = []
     for sentence in sentences:
         sentence = sentence.strip()
-        if sentence:   # 頭尾空白清掉後若不是空字串就放入cleaned
+        if sentence:   # 頭尾空白清掉後若不是空字串就放入cleaned[]
             cleaned.append(sentence)
 
     return cleaned
@@ -95,45 +97,46 @@ def is_noisy_sentence(sentence: str) -> bool:
     return False
 
 
-def score_sentence(question: str, sentence: str) -> int:
+def score_sentence(
+    question: str,
+    sentence: str,
+    question_embedding: list[float] | None = None
+) -> float:
     """
-    計算某單一句子和使用者問題的相關程度
+    使用 hybrid scoring：
+    1. embedding semantic similarity（主要）
+    2. token overlap（輔助）
     """
+
+    if not question or not question.strip():
+        return 0.0
+    if not sentence or not sentence.strip():
+        return 0.0
+
+    # --- semantic similarity（主體） ---
+    try:
+        if question_embedding is None:
+            question_embedding = embed_text(question)
+
+        s_emb = embed_text(sentence)
+        semantic_score = cosine_similarity(question_embedding, s_emb)
+    except Exception:
+        semantic_score = 0.0
+
+    # --- token overlap（輔助） ---
     question_tokens = tokenize(question)
     sentence_tokens = tokenize(sentence)
 
-    if not question_tokens or not sentence_tokens:
-        return 0
+    overlap_score = 0.0
+    if question_tokens and sentence_tokens:
+        sentence_token_set = set(sentence_tokens)
+        overlap_count = sum(1 for t in question_tokens if t in sentence_token_set)
+        overlap_score = overlap_count / len(question_tokens)
 
-    score = 0
-    sentence_token_set = set(sentence_tokens)
+    # --- final score（權重組合） ---
+    final_score = (semantic_score * 0.8) + (overlap_score * 0.2)
 
-    for token in question_tokens:   # 問題中的自若出現在句子中 分數+1
-        if token in sentence_token_set:
-            score += 1
-
-    normalized_question = normalize_text(question)
-    normalized_sentence = normalize_text(sentence)
-
-    if normalized_question and normalized_question in normalized_sentence:
-        score += 3
-
-    sentence_lower = sentence.lower()
-    bonus_keywords = [
-        "may adversely affect",
-        "could harm",
-        "could adversely affect",
-        "may negatively impact",
-        "uncertainty",
-        "risk",
-        "failure to",
-        "depend on",
-    ]
-    for keyword in bonus_keywords:
-        if keyword in sentence_lower:
-            score += 2
-
-    return score
+    return final_score
 
 
 def select_supporting_sentences(
@@ -145,6 +148,8 @@ def select_supporting_sentences(
     從 retrieved chunks 裡挑出最相關且比較像(最相關）答案的句子
     """
     candidates = []
+
+    question_embedding = embed_text(question)
 
     for chunk_rank, chunk in enumerate(retrieved_chunks, start=1):
         chunk_text = chunk.get("text", "")
@@ -158,8 +163,12 @@ def select_supporting_sentences(
             if is_noisy_sentence(sentence):
                 continue
 
-            sentence_score = score_sentence(question, sentence)
-            if sentence_score <= 0:
+            sentence_score = score_sentence(
+                question,
+                sentence,
+                question_embedding=question_embedding
+            )
+            if sentence_score < 0.35:   # 避免語意相似度太低的句子被選入
                 continue
 
             candidates.append({
@@ -374,3 +383,16 @@ def build_llm_grounded_answer(
         "model": llm_result.get("model"),
         "usage": llm_result.get("usage", {}),
     }
+
+def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    if not vec1 or not vec2 or len(vec1) != len(vec2):
+        return 0.0
+
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    norm1 = math.sqrt(sum(a * a for a in vec1))
+    norm2 = math.sqrt(sum(b * b for b in vec2))
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return dot_product / (norm1 * norm2)
