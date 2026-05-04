@@ -17,8 +17,8 @@ NOISY_SENTENCE_PATTERNS = [
     r"for a discussion of",
 ]
 
-# 若句子包含某些keywords，就自動歸類成某個topic
-TOPIC_RULES = [
+# 若句子包含某些 keywords，就自動歸類成某個 topic
+TOPIC_RULES = [   #####
     {
         "label": "changing industry demand",
         "keywords": ["evolving", "industry", "markets", "demand", "competition", "market share"]
@@ -103,9 +103,11 @@ def score_sentence(
     question_embedding: list[float] | None = None
 ) -> float:
     """
+    從一大段財報文字中，找出最可能回答使用者問題的句子
     使用 hybrid scoring：
-    1. embedding semantic similarity（主要）
-    2. token overlap（輔助）
+    1. embedding semantic similarity（80%)語意相似度
+    2. token overlap（20%）關鍵字重疊
+    回傳分數越高關聯性越高
     """
 
     if not question or not question.strip():
@@ -119,7 +121,7 @@ def score_sentence(
             question_embedding = embed_text(question)
 
         s_emb = embed_text(sentence)
-        semantic_score = cosine_similarity(question_embedding, s_emb)
+        semantic_score = cosine_similarity(question_embedding, s_emb)   # 計算問題 embedding 和句子 embedding 的相似程度
     except Exception:
         semantic_score = 0.0
 
@@ -129,9 +131,9 @@ def score_sentence(
 
     overlap_score = 0.0
     if question_tokens and sentence_tokens:
-        sentence_token_set = set(sentence_tokens)
-        overlap_count = sum(1 for t in question_tokens if t in sentence_token_set)
-        overlap_score = overlap_count / len(question_tokens)
+        sentence_token_set = set(sentence_tokens)   # 去重/查詢某個詞是否存在比list快
+        overlap_count = sum(1 for t in question_tokens if t in sentence_token_set)  # 問題token出現在句子token就+1
+        overlap_score = overlap_count / len(question_tokens)   # 計算問題toke有有多少比例出現在句子token
 
     # --- final score（權重組合） ---
     final_score = (semantic_score * 0.8) + (overlap_score * 0.2)
@@ -151,11 +153,12 @@ def select_supporting_sentences(
 
     question_embedding = embed_text(question)
 
+    # rank 越前面的 chunk，代表 retriever 原本判斷它越相關
     for chunk_rank, chunk in enumerate(retrieved_chunks, start=1):
-        chunk_text = chunk.get("text", "")
+        chunk_text = chunk.get("text", "")   # 從chunk取出metadata及text
         section_name = chunk.get("section_name")
         chunk_index = chunk.get("chunk_index")
-        retrieval_score = chunk.get("score")
+        retrieval_score = chunk.get("score")   # 整個chunk對問題的相關程度
 
         sentences = split_into_sentences(chunk_text)
 
@@ -163,12 +166,12 @@ def select_supporting_sentences(
             if is_noisy_sentence(sentence):
                 continue
 
-            sentence_score = score_sentence(
+            sentence_score = score_sentence(   # 單一句子跟問題的相關程度
                 question,
                 sentence,
                 question_embedding=question_embedding
             )
-            if sentence_score < 0.35:   # 避免語意相似度太低的句子被選入
+            if sentence_score < 0.35:   # 避免語意相似度太低的句子被選入 此數值可根據回答精準度和召回率調整 並非固定值
                 continue
 
             candidates.append({
@@ -187,43 +190,45 @@ def select_supporting_sentences(
     candidates.sort(
         key=lambda x: (
             x["sentence_score"],
-            x["retrieval_score"] if x["retrieval_score"] is not None else 0,
+            x["retrieval_score"] if x["retrieval_score"] is not None else 0,  # 沒有值就當作 0
             -x["chunk_rank"]
         ),
         reverse=True
     )
 
+    # 開始從排序後的 candidates 裡挑出最後結果
     selected = []
-    seen = set()
+    seen = set()   # 避免重複句
 
-    for item in candidates:
-        normalized_sentence = normalize_text(item["sentence"])
+    for item in candidates:   # 取到所設定的max數量及停止並回傳結果
+        normalized_sentence = normalize_text(item["sentence"])   # 句子做標準化方便去重
         if normalized_sentence in seen:
             continue
 
         seen.add(normalized_sentence)
-        selected.append(item)
+        selected.append(item)  # 句子＋整包metadata都放入
 
         if len(selected) >= max_sentences:
             break
 
     return selected
 
-
+# 從已經選出來的 supporting sentences 裡面，根據關鍵字規則判斷這些句子提到哪些主題，最後回傳主題列表
 def detect_topics_from_sentences(supporting_sentences: list[dict]) -> list[str]:
     """
-    從 supporting sentences 推測主要風險主題
+    從上面選出的supporting_sentences推測主題類別
     """
     detected_topics = []
 
     for item in supporting_sentences:
-        sentence = item["sentence"].lower()
+        #sentence = item["sentence"].lower()
+        sentence = item.get("sentence", "").lower()
 
         for rule in TOPIC_RULES:
-            if rule["label"] in detected_topics:
+            if rule["label"] in detected_topics:  # 避免重複加入同個主題
                 continue
 
-            if any(keyword in sentence for keyword in rule["keywords"]):
+            if any(keyword in sentence for keyword in rule["keywords"]):   # any() 其中一個是 TRUE 整體結果就是 TRUE
                 detected_topics.append(rule["label"])
 
     return detected_topics
@@ -231,7 +236,7 @@ def detect_topics_from_sentences(supporting_sentences: list[dict]) -> list[str]:
 
 def format_topic_list(topics: list[str]) -> str:
     """
-    將 topic list 轉成自然英文列舉
+    將 topic list 轉成自然英文列舉(A, B and C)
     """
     if not topics:
         return ""
@@ -242,12 +247,12 @@ def format_topic_list(topics: list[str]) -> str:
     if len(topics) == 2:
         return f"{topics[0]} and {topics[1]}"
 
-    return ", ".join(topics[:-1]) + f", and {topics[-1]}"
+    return ", ".join(topics[:-1]) + f", and {topics[-1]}"   # topics[:-1] 除了最後ㄧ個的所有元素
 
 
 def build_summary_answer(question: str, supporting_sentences: list[dict]) -> str:
     """
-    把 supporting sentences 整理成比較像真正回答的 summary
+    把 supporting sentences 整理成比較像真正回答的 summary (非LLM 生成答案 而是根據規則組合出回答)
     """
     if not supporting_sentences:
         return "I could not find enough relevant evidence in the filing to produce a grounded summary answer."
@@ -255,7 +260,7 @@ def build_summary_answer(question: str, supporting_sentences: list[dict]) -> str
     question_lower = question.lower()
     topics = detect_topics_from_sentences(supporting_sentences)
 
-    if "risk factor" in question_lower:
+    if "risk factor" in question_lower:     #####
         if topics:
             topic_text = format_topic_list(topics[:4])
             return (
@@ -263,7 +268,7 @@ def build_summary_answer(question: str, supporting_sentences: list[dict]) -> str
                 f"These risks could negatively affect the company's business, financial condition, and operating results."
             )
 
-        return (
+        return (   # 沒有抓到具體 topic 採保守回答
             "The filing says the company's main risk factors could harm its business, financial condition, "
             "results of operations, reputation, and stock price."
         )
@@ -295,7 +300,7 @@ def build_grounded_answer(
         retrieved_chunks=retrieved_chunks,
         max_sentences=max_sentences
     )
-
+    # 把所有被選中的 supporting sentences 接成一段 answer (extractive answer)
     if supporting_sentences:
         extractive_answer = " ".join(item["sentence"] for item in supporting_sentences)
     else:
@@ -335,37 +340,40 @@ def build_llm_grounded_answer(
     question: str,
     retrieved_chunks: list[dict],
     max_context_chunks: int = RAG_LLM_MAX_CONTEXT_CHUNKS,
-    max_chars_per_chunk: int = RAG_LLM_MAX_CHARS_PER_CHUNK,
-    temperature: float = 0.2,
+    max_chars_per_chunk: int = RAG_LLM_MAX_CHARS_PER_CHUNK, #####
+    temperature: float = 0.2,   # 控制 LLM 回答的隨機程度(低/穩定)
 ) -> dict:
     """Generate a grounded answer from retrieved chunks with LLM."""
     if not retrieved_chunks:
         raise LLMServiceError("No retrieved chunks were provided for LLM answer generation.")
 
-    contexts: list[str] = []
+    contexts: list[str] = []   # 建立一個空 list，準備放要給 LLM 的 context
     selected_chunks = retrieved_chunks[:max_context_chunks]
 
-    for chunk in selected_chunks:
+    for chunk in selected_chunks:     # 從 chunk 的 dict 結構中取 "text" 的欄位資料
         text = (chunk.get("text") or "").strip()
         if not text:
             continue
 
         section_name = chunk.get("section_name") or "unknown_section"
         chunk_index = chunk.get("chunk_index")
-        chunk_label = f"{section_name}:{chunk_index}" if chunk_index is not None else section_name
+
+        chunk_label = f"{section_name}:{chunk_index}" if chunk_index is not None else section_name   # e.g. "Risk Factors:12"
         contexts.append(f"Source={chunk_label}\n{text[:max_chars_per_chunk]}")
 
     if not contexts:
         raise LLMServiceError("Retrieved chunks did not include usable text contexts.")
 
+    # 呼叫 LLM 產生答案
     llm_result = generate_answer(
         question=question,
         contexts=contexts,
         temperature=temperature
     )
 
+    # 將提供給 LLM 的來源 chunks 整理成 sources
     sources = []
-    for rank, chunk in enumerate(selected_chunks, start=1):
+    for rank, chunk in enumerate(selected_chunks, start=1):   # line 351
         sources.append({
             "source_rank": rank,
             "chunk_index": chunk.get("chunk_index"),
@@ -384,15 +392,16 @@ def build_llm_grounded_answer(
         "usage": llm_result.get("usage", {}),
     }
 
+# 計算兩個向量的餘弦相似度 用來判斷兩段文字的語意向量有多接近 最後回傳相似度分數
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     if not vec1 or not vec2 or len(vec1) != len(vec2):
         return 0.0
 
-    dot_product = sum(a * b for a, b in zip(vec1, vec2))
-    norm1 = math.sqrt(sum(a * a for a in vec1))
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))   # 內積
+    norm1 = math.sqrt(sum(a * a for a in vec1))            # 向量長度
     norm2 = math.sqrt(sum(b * b for b in vec2))
 
-    if norm1 == 0 or norm2 == 0:
+    if norm1 == 0 or norm2 == 0:   # 避免分母可能為0
         return 0.0
 
     return dot_product / (norm1 * norm2)

@@ -1,4 +1,4 @@
-# 把使用者問題轉成英文關鍵字，對每個財報 chunk 進行關鍵字與片語比對，排除雜訊段落，根據財報章節加權，最後回傳分數最高的幾個相關段落
+# 把使用者問題轉成英文關鍵字，對每個財報 chunk 進行關鍵字與片語比對，排除雜訊段落，根據財報章節加權，最後回傳分數最高的幾個相關段落(chunk)
 # Rule-based keyword retriever
 import re
 from collections import Counter
