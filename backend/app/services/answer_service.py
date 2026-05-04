@@ -404,4 +404,4 @@ def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     if norm1 == 0 or norm2 == 0:   # 避免分母可能為0
         return 0.0
 
-    return dot_product / (norm1 * norm2)
+    return dot_product / (norm1 * norm2)      # cosine similarity
