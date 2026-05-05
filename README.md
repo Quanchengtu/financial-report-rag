@@ -249,7 +249,7 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_TIMEOUT_SECONDS=30
 ```
 
-## Phase 2 Answer Flow (LLM + Fallback)
+## Answer Flow (LLM + Fallback) (Phase 2) 
 
 `GET /rag/answer` now supports:
 
