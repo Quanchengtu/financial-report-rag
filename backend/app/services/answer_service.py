@@ -133,7 +133,7 @@ def score_sentence(
     if question_tokens and sentence_tokens:
         sentence_token_set = set(sentence_tokens)   # 去重/查詢某個詞是否存在比list快
         overlap_count = sum(1 for t in question_tokens if t in sentence_token_set)  # 問題token出現在句子token就+1
-        overlap_score = overlap_count / len(question_tokens)   # 計算問題toke有有多少比例出現在句子token
+        overlap_score = overlap_count / len(question_tokens)   # 計算問題token有有多少比例出現在句子token
 
     # --- final score（權重組合） ---
     final_score = (semantic_score * 0.8) + (overlap_score * 0.2)
