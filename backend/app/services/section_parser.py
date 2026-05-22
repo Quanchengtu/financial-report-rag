@@ -95,20 +95,30 @@ def get_priority_sections_for_question(question: str) -> list[str]:
     q = question.lower()
 
     priorities = []
-
-    if "risk factors" in q or "risk factor" in q:
+ 
+    # 1) Risk factors
+    if any(k in q for k in ["risk factors", "risk factor", "key risks", "major risks"]):
         priorities.append("item_1a_risk_factors")
 
-    if "market risk" in q:
+    # 2) Market risk (interest rate/FX/commodity)
+    if any(k in q for k in ["market risk", "interest rate", "foreign exchange", "fx", "commodity"]):
         priorities.append("item_7a_market_risk")
 
-    if "management discussion" in q or "results of operations" in q:
+    # 3) Operating and financial performance (MD&A)
+    if any(k in q for k in [
+        "management discussion", "results of operations", "mda", "md&a",
+        "revenue", "gross margin", "operating", "cash flow", "liquidity",
+        "capital expenditure", "capex"
+    ]):
         priorities.append("item_7_mda")
 
-    if "business" in q:
+    # 4) Business model / products / customers
+    if any(k in q for k in ["business", "product", "service", "customer", "business model"]):
         priorities.append("item_1_business")
 
-    if "legal proceedings" in q:
+    # 5) Legal / regulatory
+    if any(k in q for k in ["legal proceedings", "litigation", "lawsuit", "regulatory", "compliance"]):
         priorities.append("item_3_legal_proceedings")
 
-    return priorities
+    # 去重且保序
+    return list(dict.fromkeys(priorities))
