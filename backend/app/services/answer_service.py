@@ -300,6 +300,24 @@ def build_grounded_answer(
         retrieved_chunks=retrieved_chunks,
         max_sentences=max_sentences
     )
+    # 證據不足時採保守回答（不亂回答）
+    if len(supporting_sentences) < 2:
+        sources = []
+        for rank, chunk in enumerate(retrieved_chunks, start=1):
+            sources.append({
+                "source_rank": rank,
+                "chunk_index": chunk.get("chunk_index"),
+                "section_name": chunk.get("section_name"),
+                "score": chunk.get("score"),
+                "text_excerpt": chunk.get("text", "")[:500]
+            })
+        return {
+            "answer": "I do not have enough cited evidence from the filing to provide a reliable answer.",
+            "summary_answer": "I do not have enough cited evidence from the filing to provide a reliable answer.",
+            "supporting_sentences": supporting_sentences,
+            "sources": sources,
+            "detected_topics": [],
+        }
     # 把所有被選中的 supporting sentences 接成一段 answer (extractive answer)
     if supporting_sentences:
         extractive_answer = " ".join(item["sentence"] for item in supporting_sentences)
