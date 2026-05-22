@@ -171,7 +171,7 @@ def select_supporting_sentences(
                 sentence,
                 question_embedding=question_embedding
             )
-            if sentence_score < 0.35:   # 避免語意相似度太低的句子被選入 此數值可根據回答精準度和召回率調整 並非固定值
+            if sentence_score < 0.30:   # 避免語意相似度太低的句子被選入 此數值可根據回答精準度和召回率調整 並非固定值
                 continue
 
             candidates.append({
@@ -302,7 +302,7 @@ def build_grounded_answer(
     )
 
     # 證據不足時採保守回答（不亂回答）
-    if len(supporting_sentences) < 2:
+    if len(supporting_sentences) < 1:
         sources = []
         for rank, chunk in enumerate(retrieved_chunks, start=1):
             sources.append({
