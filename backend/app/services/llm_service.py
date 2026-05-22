@@ -41,13 +41,13 @@ def _build_messages(question: str, contexts: list[str]) -> list[dict]:
     ]
 
 # 主要給外部呼叫的程式
-def generate_answer(question: str, contexts: list[str], temperature: float = 0.2) -> dict:   # 0.2 為保守回答
+def _chat_completion(messages: list[dict], temperature: float = 0.2) -> dict:   # 0.2 為保守回答
     # Call a chat-completions-compatible endpoint and return answer text plus usage metadata.
     if not LLM_API_KEY:
         raise LLMServiceError("LLM_API_KEY is not set.")
 
-    if not contexts:   # 沒有context直接報錯
-        raise LLMServiceError("At least one context chunk is required.")
+    #if not contexts:   # 沒有context直接報錯
+    #    raise LLMServiceError("At least one context chunk is required.")
 
     try:
         response = requests.post(     # API 認證與資料格式設定
@@ -58,7 +58,7 @@ def generate_answer(question: str, contexts: list[str], temperature: float = 0.2
             },
             json={   # 送給 LLM 的主要資料（json body)
                 "model": LLM_MODEL_NAME,
-                "messages": _build_messages(question=question, contexts=contexts),   # prompt messages
+                "messages": messages,   # prompt messages
                 "temperature": temperature,
             },
             timeout=LLM_API_TIMEOUT_SECONDS,
@@ -88,3 +88,36 @@ def generate_answer(question: str, contexts: list[str], temperature: float = 0.2
         "model": payload.get("model", LLM_MODEL_NAME),
         "usage": payload.get("usage", {}),   # 可看token消耗
     }
+
+def generate_answer(question: str, contexts: list[str], temperature: float = 0.2) -> dict:   # 0.2 為保守回答
+    if not contexts:
+        raise LLMServiceError("At least one context chunk is required.")
+    return _chat_completion(_build_messages(question=question, contexts=contexts), temperature=temperature)
+
+
+def generate_summary_from_answer(question: str, answer: str, temperature: float = 0.2) -> dict:
+    if not answer or not answer.strip():
+        raise LLMServiceError("Answer text is required for summary generation.")
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a financial filing assistant. Rewrite the provided answer into a concise, readable, "
+                "well-structured Traditional Chinese summary. Do not copy long phrases verbatim. "
+                "Do not add facts not present in the provided answer."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Question:\n"
+                f"{question.strip()}\n\n"
+                "Answer to summarize:\n"
+                f"{answer.strip()}\n\n"
+                "Return 2-4 clear Traditional Chinese sentences."
+            ),
+        },
+    ]
+
+    return _chat_completion(messages=messages, temperature=temperature)

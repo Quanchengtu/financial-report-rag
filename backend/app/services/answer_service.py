@@ -1,6 +1,6 @@
 # 將 retriever 找到的 chunks，整理成可回答使用者問題的答案
 from app.core.config import RAG_LLM_MAX_CHARS_PER_CHUNK, RAG_LLM_MAX_CONTEXT_CHUNKS
-from app.services.llm_service import generate_answer, LLMServiceError
+from app.services.llm_service import generate_answer, generate_summary_from_answer, LLMServiceError
 import re   # Python 內建的正規表示式工具，用來切句子、過濾雜訊
 from app.services.retriever import tokenize, normalize_text   # 將問題和句子轉成較好比對的格式
 from app.services.embedding_service import embed_text
@@ -52,6 +52,33 @@ TOPIC_RULES = [   #####
         "keywords": ["climate", "economic conditions", "global operating", "international sales"]
     },
 ]
+
+UNSUPPORTED_QUESTION_PATTERNS = [
+    r"\bexact\b.*\bforecast\b",
+    r"\brevenue\s+forecast\b",
+    r"\bretire(?:ment|)\b",
+    r"\bnon-public\b",
+    r"\bcurrently\s+under\s+negotiation\b",
+    r"\bacquisition\s+targets?\b",
+    r"\b明年\b.*\b退休\b",
+    r"\b精確\b.*\b預測\b",
+    r"\b未公開\b.*\b併購\b",
+    r"\b談判\b.*\b併購\b",
+]
+
+
+def is_unsupported_question(question: str) -> bool:
+    """Return True when a question asks for non-public or overly specific forward-looking facts."""
+    q = (question or "").strip().lower()
+    if not q:
+        return False
+
+    for pattern in UNSUPPORTED_QUESTION_PATTERNS:
+        if re.search(pattern, q):
+            return True
+
+    return False
+
 
 
 def split_into_sentences(text: str) -> list[str]:
@@ -274,8 +301,15 @@ def build_summary_answer(question: str, supporting_sentences: list[dict]) -> str
         )
 
     # 一般問題 fallback
-    first_sentence = supporting_sentences[0]["sentence"]
-    return first_sentence
+    #first_sentence = supporting_sentences[0]["sentence"]
+    #return first_sentence
+     # 一般問題：整合前2句，讓 summary 比直接擷取第一句更完整可讀
+    summary_parts = [item.get("sentence", "").strip() for item in supporting_sentences[:2]]
+    summary_parts = [part for part in summary_parts if part]
+    if not summary_parts:
+        return "I could not find enough relevant evidence in the filing to produce a grounded summary answer."
+
+    return " ".join(summary_parts)
 
 
 def build_grounded_answer(
@@ -294,6 +328,27 @@ def build_grounded_answer(
             "sources": [],
             "detected_topics": []
         }
+
+    if is_unsupported_question(question):
+        conservative = "I do not have enough cited evidence from the filing to provide a reliable answer."
+        sources = []
+        for rank, chunk in enumerate(retrieved_chunks, start=1):
+            sources.append({
+                "source_rank": rank,
+                "chunk_index": chunk.get("chunk_index"),
+                "section_name": chunk.get("section_name"),
+                "score": chunk.get("score"),
+                "text_excerpt": chunk.get("text", "")[:500]
+            })
+
+        return {
+            "answer": conservative,
+            "summary_answer": conservative,
+            "supporting_sentences": [],
+            "sources": sources,
+            "detected_topics": []
+        }
+    
 
     supporting_sentences = select_supporting_sentences(
         question=question,
@@ -336,6 +391,12 @@ def build_grounded_answer(
 
     detected_topics = detect_topics_from_sentences(supporting_sentences)
     summary_answer = build_summary_answer(question, supporting_sentences)
+
+    try:
+        llm_summary_result = generate_summary_from_answer(question=question, answer=extractive_answer, temperature=0.2)
+        summary_answer = llm_summary_result["answer"]
+    except LLMServiceError:
+        pass
 
     sources = []
     for rank, chunk in enumerate(retrieved_chunks, start=1):
@@ -402,9 +463,17 @@ def build_llm_grounded_answer(
             "text_excerpt": (chunk.get("text") or "")[:500]
         })
 
+    summary_answer = llm_result["answer"]
+    try:
+        llm_summary_result = generate_summary_from_answer(question=question, answer=llm_result["answer"], temperature=temperature)
+        summary_answer = llm_summary_result["answer"]
+    except LLMServiceError:
+        pass
+
     return {
         "answer": llm_result["answer"],
-        "summary_answer": llm_result["answer"],
+        #"summary_answer": llm_result["answer"],
+        "summary_answer": summary_answer,
         "supporting_sentences": [],
         "sources": sources,
         "detected_topics": [],
