@@ -40,6 +40,7 @@ def ask_question(cik: str, filing: dict, question_text: str):
         "question": question_text,
         "top_k": top_k,
         "max_sentences": max_sentences,
+        "use_llm": "true",
     }
     resp = requests.get(f"{API_BASE_URL}/rag/answer", params=params, timeout=60)
     resp.raise_for_status()
@@ -84,9 +85,27 @@ if filings:
                 st.subheader("Answer")
                 st.write(result.get("answer", "No answer generated."))
 
+                fallback_used = result.get("fallback_used")
+                mode = result.get("mode") or "N/A"
+                model = result.get("model") or "N/A"
+                fallback_reason = result.get("fallback_reason") or "None"
+
+                st.caption(
+                    " | ".join([
+                        f"fallback_used={fallback_used}",
+                        f"mode={mode}",
+                        f"model={model}",
+                        f"fallback_reason={fallback_reason}",
+                    ])
+                )
                 st.subheader("Summary")
-                summary = result.get("answer", "")
+                # summary = result.get("answer", "")
+                summary = result.get("summary_answer", "")
                 st.write(summary[:300] + ("..." if len(summary) > 300 else ""))
+                st.caption(
+                    f"mode={result.get('mode')} | fallback_used={result.get('fallback_used')} | model={result.get('model') or 'N/A'}"
+                )
+
 
                 st.subheader("Evidence")
                 supporting_sentences = result.get("supporting_sentences", [])

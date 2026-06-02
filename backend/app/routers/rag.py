@@ -255,6 +255,7 @@ def answer_question_from_filing(
         )
 
         fallback_used = False
+        fallback_reason = None
         model = None
         usage = {}
 
@@ -268,8 +269,9 @@ def answer_question_from_filing(
                 model = answer_result.get("model")
                 usage = answer_result.get("usage", {})
                 mode = "llm_grounded_answer_v1"
-            except LLMServiceError:
+            except LLMServiceError as exc:
                 fallback_used = True
+                fallback_reason = str(exc)
                 answer_result = build_grounded_answer(
                     question=question,
                     retrieved_chunks=retrieved_chunks,
@@ -277,6 +279,10 @@ def answer_question_from_filing(
                 )
                 mode = "grounded_answer_v2_fallback"
         else:
+            if not use_llm:
+                fallback_reason = "LLM generation disabled by request (use_llm=false)."
+            elif not RAG_LLM_ENABLED:
+                fallback_reason = "LLM generation disabled by server config (RAG_LLM_ENABLED=false)."
             answer_result = build_grounded_answer(
                 question=question,
                 retrieved_chunks=retrieved_chunks,
@@ -299,6 +305,7 @@ def answer_question_from_filing(
             "supporting_sentences": answer_result["supporting_sentences"],
             "sources": answer_result["sources"],
             "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
             "model": model,
             "usage": usage
         }
@@ -330,6 +337,7 @@ def hybrid_answer_question_from_filing(
         retrieved_chunks = retrieval_result["results"]
 
         fallback_used = False
+        fallback_reason = None
         model = None
         usage = {}
 
@@ -343,8 +351,9 @@ def hybrid_answer_question_from_filing(
                 model = answer_result.get("model")
                 usage = answer_result.get("usage", {})
                 mode = "hybrid_llm_grounded_answer_v1"
-            except LLMServiceError:
+            except LLMServiceError as exc:
                 fallback_used = True
+                fallback_reason = str(exc)
                 answer_result = build_grounded_answer(
                     question=question,
                     retrieved_chunks=retrieved_chunks,
@@ -352,6 +361,10 @@ def hybrid_answer_question_from_filing(
                 )
                 mode = "hybrid_grounded_answer_v2_fallback"
         else:
+            if not use_llm:
+                fallback_reason = "LLM generation disabled by request (use_llm=false)."
+            elif not RAG_LLM_ENABLED:
+                fallback_reason = "LLM generation disabled by server config (RAG_LLM_ENABLED=false)."
             answer_result = build_grounded_answer(
                 question=question,
                 retrieved_chunks=retrieved_chunks,
@@ -374,6 +387,7 @@ def hybrid_answer_question_from_filing(
             "supporting_sentences": answer_result["supporting_sentences"],
             "sources": answer_result["sources"],
             "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
             "model": model,
             "usage": usage
         }
