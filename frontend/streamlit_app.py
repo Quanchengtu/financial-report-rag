@@ -42,9 +42,43 @@ def ask_question(cik: str, filing: dict, question_text: str):
         "max_sentences": max_sentences,
         "use_llm": "true",
     }
-    resp = requests.get(f"{API_BASE_URL}/rag/answer", params=params, timeout=60)
+    resp = requests.get(f"{API_BASE_URL}/rag/hybrid-answer", params=params, timeout=60)
     resp.raise_for_status()
     return resp.json()
+
+def has_semantic_results(result: dict) -> bool | None:
+    """Return whether the hybrid response reports semantic/vector matches, if available."""
+    semantic_matched_count = result.get("semantic_matched_count")
+    if semantic_matched_count is not None:
+        return semantic_matched_count > 0
+
+    retrieval_diagnostics = result.get("retrieval_diagnostics") or {}
+    vector_matched_count = retrieval_diagnostics.get("vector_matched_count")
+    if vector_matched_count is not None:
+        return vector_matched_count > 0
+
+    return None
+
+
+def show_retrieval_behavior(result: dict):
+    st.subheader("Retrieval Behavior")
+
+    behavior_fields = {
+        "mode": result.get("mode"),
+        "fallback_used": result.get("fallback_used"),
+        "model": result.get("model") or "N/A",
+        "matched_count": result.get("matched_count"),
+        "used_priority_sections": result.get("used_priority_sections") or [],
+    }
+    st.json(behavior_fields)
+
+    if has_semantic_results(result) is False:
+        st.warning(
+            "No semantic/vector results were available for this filing. "
+            "Hybrid retrieval is using rule-based fallback results only; index the filing in the vector store "
+            "to enable semantic retrieval."
+        )
+
 
 
 if st.button("Load Filings"):
@@ -85,26 +119,28 @@ if filings:
                 st.subheader("Answer")
                 st.write(result.get("answer", "No answer generated."))
 
+                show_retrieval_behavior(result)
+
                 fallback_used = result.get("fallback_used")
                 mode = result.get("mode") or "N/A"
                 model = result.get("model") or "N/A"
                 fallback_reason = result.get("fallback_reason") or "None"
 
-                st.caption(
-                    " | ".join([
-                        f"fallback_used={fallback_used}",
-                        f"mode={mode}",
-                        f"model={model}",
-                        f"fallback_reason={fallback_reason}",
-                    ])
-                )
+                # st.caption(
+                #     " | ".join([
+                #         f"fallback_used={fallback_used}",
+                #         f"mode={mode}",
+                #         f"model={model}",
+                #         f"fallback_reason={fallback_reason}",
+                #     ])
+                # )
                 st.subheader("Summary")
                 # summary = result.get("answer", "")
                 summary = result.get("summary_answer", "")
                 st.write(summary[:300] + ("..." if len(summary) > 300 else ""))
-                st.caption(
-                    f"mode={result.get('mode')} | fallback_used={result.get('fallback_used')} | model={result.get('model') or 'N/A'}"
-                )
+                # st.caption(
+                #     f"mode={result.get('mode')} | fallback_used={result.get('fallback_used')} | model={result.get('model') or 'N/A'}"
+                # )
 
 
                 st.subheader("Evidence")

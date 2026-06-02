@@ -135,5 +135,6 @@ def hybrid_retrieve(
         "cik": normalized_cik,
         "filing_document_url": filing_document_url,
         "used_priority_sections": priority_sections,
+        "semantic_matched_count": len(semantic_results),
         "results": merged[:top_k]
     }

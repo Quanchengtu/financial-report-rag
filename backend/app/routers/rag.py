@@ -381,6 +381,7 @@ def hybrid_answer_question_from_filing(
             "question": question,
             "used_priority_sections": retrieval_result["used_priority_sections"],
             "matched_count": len(retrieved_chunks),
+            "semantic_matched_count": retrieval_result.get("semantic_matched_count", 0),
             "summary_answer": answer_result["summary_answer"],
             "answer": answer_result["answer"],
             "detected_topics": answer_result["detected_topics"],
