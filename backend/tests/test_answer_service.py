@@ -46,3 +46,36 @@ def test_financial_value_without_metric_is_still_filtered():
     sentence = "$1,234 $5,678 $9,012 2023 2024"
 
     assert answer_service.is_noisy_sentence(sentence, question="What was revenue?") is True
+
+def test_score_sentence_falls_back_to_financial_lexical_score_when_embedding_fails():
+    answer_service = import_answer_service_with_stubs()
+    answer_service.embed_text = lambda text: (_ for _ in ()).throw(RuntimeError("embedding unavailable"))
+
+    score = answer_service.score_sentence(
+        "What was the company's revenue in 2026?",
+        "Revenue in 2026 was $12.4 million.",
+    )
+
+    assert score >= 0.30
+
+
+def test_select_supporting_sentences_uses_financial_evidence_when_embedding_fails():
+    answer_service = import_answer_service_with_stubs()
+    answer_service.embed_text = lambda text: (_ for _ in ()).throw(RuntimeError("embedding unavailable"))
+
+    selected = answer_service.select_supporting_sentences(
+        question="What was the company's revenue in 2026?",
+        retrieved_chunks=[
+            {
+                "text": "Revenue in 2026 was $12.4 million. The company opened a new office in 2026.",
+                "section_name": "item_7_mda",
+                "chunk_index": 7,
+                "score": 5,
+            }
+        ],
+        max_sentences=2,
+    )
+
+    assert len(selected) == 1
+    assert selected[0]["sentence"] == "Revenue in 2026 was $12.4 million."
+    assert selected[0]["sentence_score"] >= 0.30

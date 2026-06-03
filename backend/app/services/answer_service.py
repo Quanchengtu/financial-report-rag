@@ -188,6 +188,44 @@ def is_noisy_sentence(sentence: str, question: str | None = None) -> bool:
 
     return False
 
+def lexical_sentence_score(question: str, sentence: str) -> float:
+    """
+    Compute a lexical relevance score that can stand on its own when embeddings are unavailable.
+
+    Token overlap alone is intentionally capped, but financial metric questions receive bounded boosts when
+    a sentence contains the requested metric/year/value evidence. This avoids rejecting valid revenue-like
+    evidence simply because the embedding model failed to load.
+    """
+    question_tokens = tokenize(question)
+    sentence_tokens = tokenize(sentence)
+    if not question_tokens or not sentence_tokens:
+        return 0.0
+
+    sentence_token_set = set(sentence_tokens)
+    overlap_count = sum(1 for token in question_tokens if token in sentence_token_set)
+    overlap_score = overlap_count / len(question_tokens)
+
+    score = overlap_score
+
+    q_lower = (question or "").lower()
+    s_lower = (sentence or "").lower()
+
+    is_financial_question = is_financial_metric_question(question)
+    matched_metric = any(keyword in q_lower and keyword in s_lower for keyword in FINANCIAL_METRIC_KEYWORDS)
+    if is_financial_question and matched_metric:
+        score += 0.20
+        if contains_financial_value(sentence):
+            score += 0.20
+
+    question_years = set(re.findall(r"\b(?:20\d{2}|19\d{2})\b", question or ""))
+    sentence_years = set(re.findall(r"\b(?:20\d{2}|19\d{2})\b", sentence or ""))
+    if question_years and question_years & sentence_years:
+        score += 0.15
+
+    if is_financial_question and not matched_metric:
+        return min(score, 0.25)
+
+    return min(score, 1.0)
 
 def score_sentence(
     question: str,
@@ -195,17 +233,19 @@ def score_sentence(
     question_embedding: list[float] | None = None
 ) -> float:
     """
-    從一大段財報文字中，找出最可能回答使用者問題的句子
-    使用 hybrid scoring：
-    1. embedding semantic similarity（80%)語意相似度
-    2. token overlap（20%）關鍵字重疊
-    回傳分數越高關聯性越高
+    從一大段財報文字中，找出最可能回答使用者問題的句子。
+
+    Embedding 可用時仍以語意相似度為主；若 embedding model 載入或推論失敗，
+    改用較完整的 lexical/financial-evidence 分數，避免一般財務數字問題因最高
+    token overlap 只有 0.2 而完全選不到 supporting sentences。
     """
 
     if not question or not question.strip():
         return 0.0
     if not sentence or not sentence.strip():
         return 0.0
+    
+    lexical_score = lexical_sentence_score(question, sentence)
 
     # --- semantic similarity（主體） ---
     try:
@@ -215,20 +255,10 @@ def score_sentence(
         s_emb = embed_text(sentence)
         semantic_score = cosine_similarity(question_embedding, s_emb)   # 計算問題 embedding 和句子 embedding 的相似程度
     except Exception:
-        semantic_score = 0.0
-
-    # --- token overlap（輔助） ---
-    question_tokens = tokenize(question)
-    sentence_tokens = tokenize(sentence)
-
-    overlap_score = 0.0
-    if question_tokens and sentence_tokens:
-        sentence_token_set = set(sentence_tokens)   # 去重/查詢某個詞是否存在比list快
-        overlap_count = sum(1 for t in question_tokens if t in sentence_token_set)  # 問題token出現在句子token就+1
-        overlap_score = overlap_count / len(question_tokens)   # 計算問題token有有多少比例出現在句子token
+        return lexical_score
 
     # --- final score（權重組合） ---
-    final_score = (semantic_score * 0.8) + (overlap_score * 0.2)
+    final_score = (semantic_score * 0.8) + (lexical_score * 0.2)
 
     return final_score
 
@@ -243,7 +273,10 @@ def select_supporting_sentences(
     """
     candidates = []
 
-    question_embedding = embed_text(question)
+    try:
+        question_embedding = embed_text(question)
+    except Exception:
+        question_embedding = None
 
     # rank 越前面的 chunk，代表 retriever 原本判斷它越相關
     for chunk_rank, chunk in enumerate(retrieved_chunks, start=1):
