@@ -17,6 +17,43 @@ NOISY_SENTENCE_PATTERNS = [
     r"for a discussion of",
 ]
 
+FINANCIAL_METRIC_KEYWORDS = [
+    "revenue",
+    "revenues",
+    "net sales",
+    "sales",
+    "gross margin",
+    "gross profit",
+    "net income",
+    "income",
+    "cash flow",
+    "operating cash flow",
+    "free cash flow",
+    "operating margin",
+    "operating income",
+    "operating expense",
+    "fiscal",
+    "fiscal year",
+    "quarter",
+    "margin",
+    "profit",
+    "loss",
+    "liquidity",
+    "assets",
+    "liabilities",
+    "equity",
+    "eps",
+    "earnings",
+]
+
+FINANCIAL_VALUE_PATTERN = re.compile(
+    r"(?:\$\s*\(?[\d,]+(?:\.\d+)?\)?|"
+    r"\b[\d,]+(?:\.\d+)?\s*(?:%|percent|million|billion|thousand)\b|"
+    r"\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|"
+    r"\b(?:20\d{2}|19\d{2})\b)",
+    re.IGNORECASE,
+)
+
 # 若句子包含某些 keywords，就自動歸類成某個 topic
 TOPIC_RULES = [   #####
     {
@@ -100,21 +137,49 @@ def split_into_sentences(text: str) -> list[str]:
     return cleaned
 
 
-def is_noisy_sentence(sentence: str) -> bool:
+def is_financial_metric_question(question: str) -> bool:
+    """Return True when the user is asking about financial metrics that often include many digits."""
+    q = (question or "").lower()
+    return any(keyword in q for keyword in FINANCIAL_METRIC_KEYWORDS)
+
+
+def contains_financial_metric(text: str) -> bool:
+    """Return True when text names a common financial statement metric."""
+    t = (text or "").lower()
+    return any(keyword in t for keyword in FINANCIAL_METRIC_KEYWORDS)
+
+
+def contains_financial_value(text: str) -> bool:
+    """Return True when text contains a table-like financial value, percentage, or reporting year."""
+    return bool(FINANCIAL_VALUE_PATTERN.search(text or ""))
+
+
+def is_financial_metric_evidence(sentence: str, question: str | None = None) -> bool:
+    """Detect metric/value evidence that should survive digit-heavy table cleanup."""
+    if not is_financial_metric_question(question or ""):
+        return False
+
+    return contains_financial_metric(sentence) and contains_financial_value(sentence)
+
+
+def is_noisy_sentence(sentence: str, question: str | None = None) -> bool:
     """
     過濾明顯不像答案內容的句子 判斷雜訊句子 避免 answer_service 把無意義的句子拿去組答案或引用來源
+    財務數字問題會保留含有財務指標與金額/百分比/年度的表格文字，避免 revenue、gross margin 等證據被數字比例規則誤刪。
     """
     if not sentence or not sentence.strip():
         return True
 
     s = sentence.strip()
     s_lower = s.lower()
+    financial_metric_evidence = is_financial_metric_evidence(s, question)
 
-    if len(s) < 40:
+    if len(s) < 40 and not financial_metric_evidence:
         return True
 
     digit_count = sum(ch.isdigit() for ch in s)
-    if digit_count > 0 and digit_count / max(len(s), 1) > 0.2:   # 數字比例高的句子視為noisy_sentence
+    digit_ratio = digit_count / max(len(s), 1)
+    if digit_count > 0 and digit_ratio > 0.2 and not financial_metric_evidence:   # 數字比例高但不是財務指標證據才視為 noisy_sentence
         return True
 
     for pattern in NOISY_SENTENCE_PATTERNS:
@@ -190,7 +255,7 @@ def select_supporting_sentences(
         sentences = split_into_sentences(chunk_text)
 
         for sentence_index, sentence in enumerate(sentences):
-            if is_noisy_sentence(sentence):
+            if is_noisy_sentence(sentence, question=question):
                 continue
 
             sentence_score = score_sentence(   # 單一句子跟問題的相關程度
