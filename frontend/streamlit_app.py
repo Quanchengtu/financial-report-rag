@@ -66,6 +66,7 @@ def show_retrieval_behavior(result: dict):
     behavior_fields = {
         "mode": result.get("mode"),
         "fallback_used": result.get("fallback_used"),
+        "fallback_reason": result.get("fallback_reason") or "None",
         "model": result.get("model") or "N/A",
         "matched_count": result.get("matched_count"),
         "used_priority_sections": result.get("used_priority_sections") or [],
@@ -126,14 +127,14 @@ if filings:
                 model = result.get("model") or "N/A"
                 fallback_reason = result.get("fallback_reason") or "None"
 
-                # st.caption(
-                #     " | ".join([
-                #         f"fallback_used={fallback_used}",
-                #         f"mode={mode}",
-                #         f"model={model}",
-                #         f"fallback_reason={fallback_reason}",
-                #     ])
-                # )
+                st.caption(
+                    " | ".join([
+                        f"fallback_used={fallback_used}",
+                        f"mode={mode}",
+                        f"model={model}",
+                        f"fallback_reason={fallback_reason}",
+                    ])
+                )
                 st.subheader("Summary")
                 # summary = result.get("answer", "")
                 summary = result.get("summary_answer", "")

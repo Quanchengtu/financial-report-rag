@@ -92,14 +92,21 @@ def hybrid_retrieve(
     try:
         query_embedding = embed_text(question)
 
+        where_filter = {   # 限定在同一份財報裡面找
+                "$and" :[
+                    {"cik": normalized_cik},
+                    {"accession_number": accession_number},
+                    {"primary_document": primary_document}
+                ]   
+        }
+
+        print("Hybrid semantic where_filter:", where_filter)   # add debug print
+
         vector_results = query_similar_chunks(   # 去 vector DB 查相似 chunks
             query_embedding=query_embedding,
             top_k=top_k,
-            where={   # 限定在同一份財報裡面找
-                "cik": normalized_cik,
-                "accession_number": accession_number,
-                "primary_document": primary_document
-            }
+            where=where_filter
+            
         )
         # 取出 vector DB 回傳內容
         docs = vector_results.get("documents", [[]])[0]
