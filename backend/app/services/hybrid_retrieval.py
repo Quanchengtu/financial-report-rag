@@ -89,6 +89,13 @@ def hybrid_retrieve(
     )
 
     semantic_results = []
+    retrieval_diagnostics = {
+        "semantic_attempted": False,
+        "semantic_error": None,
+        "vector_filter": None,
+        "vector_raw_count": 0,
+    }
+
     try:
         query_embedding = embed_text(question)
 
@@ -99,17 +106,20 @@ def hybrid_retrieve(
                     {"primary_document": primary_document}
                 ]   
         }
+        retrieval_diagnostics["semantic_attempted"] = True
+        retrieval_diagnostics["vector_filter"] = where_filter
 
         print("Hybrid semantic where_filter:", where_filter)   # add debug print
 
         vector_results = query_similar_chunks(   # 去 vector DB 查相似 chunks
             query_embedding=query_embedding,
             top_k=top_k,
-            where=where_filter
-            
+            where=where_filter       
         )
+
         # 取出 vector DB 回傳內容
         docs = vector_results.get("documents", [[]])[0]
+        retrieval_diagnostics["vector_raw_count"] = len(docs)
         metadatas = vector_results.get("metadatas", [[]])[0]
         distances = vector_results.get("distances", [[]])[0]   # 距離越小代表越相似
 
@@ -122,6 +132,7 @@ def hybrid_retrieve(
                 "text": doc
             })
     except Exception as e:   # 若 semantic retrieval 出錯，就略過，僅使用rule-baed retrieval
+        retrieval_diagnostics["semantic_error"] = str(e)
         print(f"Semantic retrieval failed: {e}")
         semantic_results = []
 
@@ -143,5 +154,6 @@ def hybrid_retrieve(
         "filing_document_url": filing_document_url,
         "used_priority_sections": priority_sections,
         "semantic_matched_count": len(semantic_results),
+        "retrieval_diagnostics": retrieval_diagnostics,
         "results": merged[:top_k]
     }
