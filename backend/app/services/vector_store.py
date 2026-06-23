@@ -33,6 +33,39 @@ def upsert_chunks(
         metadatas=metadatas
     )
 
+# 建立查詢單一財報 chunks 時使用的 metadata filter
+def build_filing_where_filter(
+    cik: str,
+    accession_number: str,
+    primary_document: str
+) -> dict:
+    return {
+        "$and": [
+            {"cik": cik},
+            {"accession_number": accession_number},
+            {"primary_document": primary_document}
+        ]
+    }
+
+
+# 計算同一份財報目前已存在於 ChromaDB 的 chunk 數量
+def count_chunks_for_filing(
+    cik: str,
+    accession_number: str,
+    primary_document: str
+) -> int:
+    collection = get_collection()
+    results = collection.get(
+        where=build_filing_where_filter(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document
+        ),
+        include=[]
+    )
+    return len(results.get("ids", []))
+
+
 # 輸入一個問題的 embedding 回傳最相似的前 top_k 個 chunks
 def query_similar_chunks(
     query_embedding: list[float],

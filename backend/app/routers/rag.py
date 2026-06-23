@@ -7,7 +7,7 @@ from app.services.section_parser import extract_sections, get_priority_sections_
 
 from app.services.embedding_service import embed_text
 from app.services.vector_store import query_similar_chunks
-from app.services.indexing_service import index_filing
+from app.services.indexing_service import ensure_filing_indexed, get_index_status, index_filing
 
 from app.services.answer_service import build_grounded_answer, build_llm_grounded_answer
 from app.services.hybrid_retrieval import hybrid_retrieve
@@ -107,9 +107,31 @@ def index_filing_to_vector_db(
     primary_document: str = Query(..., description="Primary document file name"),
     ticker: str | None = Query(None, description="Company ticker, e.g. NVDA"),
     form_type: str | None = Query(None, description="Filing type, e.g. 10-K"),
-    filing_date: str | None = Query(None, description="Filing date, e.g. 2024-02-21")
+    filing_date: str | None = Query(None, description="Filing date, e.g. 2024-02-21"),
+    force_reindex: bool = Query(False, description="Re-index even when chunks already exist")
 ):
     try:
+        if not force_reindex:
+            index_status = ensure_filing_indexed(
+                cik=cik,
+                accession_number=accession_number,
+                primary_document=primary_document,
+                company_ticker=ticker,
+                form_type=form_type,
+                filing_date=filing_date,
+                auto_index=True
+            )
+            message = "Filing already indexed" if index_status["was_indexed_before"] else "Filing indexed successfully"
+            return {
+                "message": message,
+                "indexed_count": index_status["chunk_count"],
+                "already_indexed": index_status["was_indexed_before"],
+                "indexed_now": index_status["indexed_now"],
+                "accession_number": accession_number,
+                "primary_document": primary_document,
+                "index_status": index_status
+            }
+
         result = index_filing(
             cik=cik,
             accession_number=accession_number,
@@ -121,11 +143,29 @@ def index_filing_to_vector_db(
 
         return {
             "message": "Filing indexed successfully",
+            "already_indexed": False,
+            "indexed_now": result.get("indexed_count", 0) > 0,
             **result
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to index filing: {str(e)}")
+
+
+@router.get("/index-status")
+def filing_index_status(
+    cik: str = Query(..., description="Company CIK"),
+    accession_number: str = Query(..., description="SEC accession number"),
+    primary_document: str = Query(..., description="Primary document file name")
+):
+    try:
+        return get_index_status(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check index status: {str(e)}")
 
 
 @router.get("/semantic-retrieve")
@@ -324,8 +364,22 @@ def hybrid_answer_question_from_filing(
     max_sentences: int = Query(4, ge=1, le=8, description="How many supporting sentences to use"),
     use_llm: bool = Query(True, description="Whether to use LLM answer generation"),
     llm_temperature: float = Query(RAG_LLM_TEMPERATURE, ge=0.0, le=1.0, description="LLM temperature"),
+    auto_index: bool = Query(True, description="Index the selected filing before retrieval when it is missing"),
+    ticker: str | None = Query(None, description="Company ticker for auto-index metadata, e.g. NVDA"),
+    form_type: str | None = Query(None, description="Filing type for auto-index metadata, e.g. 10-K"),
+    filing_date: str | None = Query(None, description="Filing date for auto-index metadata, e.g. 2024-02-21"),
 ):
     try:
+        index_status = ensure_filing_indexed(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document,
+            company_ticker=ticker,
+            form_type=form_type,
+            filing_date=filing_date,
+            auto_index=auto_index
+        )
+
         retrieval_result = hybrid_retrieve(
             cik=cik,
             accession_number=accession_number,
@@ -382,6 +436,7 @@ def hybrid_answer_question_from_filing(
             "used_priority_sections": retrieval_result["used_priority_sections"],
             "matched_count": len(retrieved_chunks),
             "semantic_matched_count": retrieval_result.get("semantic_matched_count", 0),
+            "index_status": index_status,
             "retrieval_diagnostics": retrieval_result.get("retrieval_diagnostics", {}),  # Update diagnostics
             "summary_answer": answer_result["summary_answer"],
             "answer": answer_result["answer"],

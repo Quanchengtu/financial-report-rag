@@ -7,7 +7,7 @@ from app.services.html_parser import extract_text_from_html
 from app.services.text_chunker import chunk_text
 from app.services.section_parser import extract_sections
 from app.services.embedding_service import embed_texts
-from app.services.vector_store import upsert_chunks
+from app.services.vector_store import count_chunks_for_filing, upsert_chunks
 
 # 把一份財報轉成一筆一筆可以存進 vector DB 的 chunk records
 def build_chunk_records(   # 抓 HTML / 清 HTML / 抽 section / 切 chunk / 加 metadata
@@ -93,6 +93,72 @@ def build_chunk_records(   # 抓 HTML / 清 HTML / 抽 section / 切 chunk / 加
             chunk_index += 1
 
     return chunk_records
+
+def get_index_status(
+    cik: str,
+    accession_number: str,
+    primary_document: str
+) -> dict:
+    normalized_cik = normalize_cik(cik)
+    chunk_count = count_chunks_for_filing(
+        cik=normalized_cik,
+        accession_number=accession_number,
+        primary_document=primary_document
+    )
+    return {
+        "indexed": chunk_count > 0,
+        "chunk_count": chunk_count,
+        "cik": normalized_cik,
+        "accession_number": accession_number,
+        "primary_document": primary_document
+    }
+
+
+def ensure_filing_indexed(
+    cik: str,
+    accession_number: str,
+    primary_document: str,
+    company_ticker: str | None = None,
+    form_type: str | None = None,
+    filing_date: str | None = None,
+    auto_index: bool = True
+) -> dict:
+    status = get_index_status(
+        cik=cik,
+        accession_number=accession_number,
+        primary_document=primary_document
+    )
+
+    index_status = {
+        "auto_index": auto_index,
+        "was_indexed_before": status["indexed"],
+        "indexed_now": False,
+        "chunk_count": status["chunk_count"],
+        "cik": status["cik"],
+        "accession_number": accession_number,
+        "primary_document": primary_document
+    }
+
+    if status["indexed"] or not auto_index:
+        return index_status
+
+    result = index_filing(
+        cik=cik,
+        accession_number=accession_number,
+        primary_document=primary_document,
+        company_ticker=company_ticker,
+        form_type=form_type,
+        filing_date=filing_date
+    )
+
+    indexed_count = result.get("indexed_count", 0)
+    index_status.update({
+        "indexed_now": indexed_count > 0,
+        "chunk_count": indexed_count,
+        "index_message": result.get("message"),
+    })
+    return index_status
+
 
 # 負責把 chunks 轉 embedding 並存進 vector DB
 def index_filing(

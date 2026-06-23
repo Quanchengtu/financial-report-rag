@@ -5,9 +5,9 @@ import streamlit as st
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 COMPANY_OPTIONS = {
-    "NVIDIA (NVDA)": "1045810",
-    "Apple (AAPL)": "320193",
-    "Microsoft (MSFT)": "789019",
+    "NVIDIA (NVDA)": {"cik": "1045810", "ticker": "NVDA"},
+    "Apple (AAPL)": {"cik": "320193", "ticker": "AAPL"},
+    "Microsoft (MSFT)": {"cik": "789019", "ticker": "MSFT"},
 }
 
 st.set_page_config(page_title="Financial Report RAG Demo", page_icon="📊", layout="wide")
@@ -41,8 +41,12 @@ def ask_question(cik: str, filing: dict, question_text: str):
         "top_k": top_k,
         "max_sentences": max_sentences,
         "use_llm": "true",
+        "auto_index": "true",
+        "ticker": COMPANY_OPTIONS[company_label]["ticker"],
+        "form_type": filing.get("form") or form_type,
+        "filing_date": filing.get("filing_date") or "",
     }
-    resp = requests.get(f"{API_BASE_URL}/rag/hybrid-answer", params=params, timeout=60)
+    resp = requests.get(f"{API_BASE_URL}/rag/hybrid-answer", params=params, timeout=180)
     resp.raise_for_status()
     return resp.json()
 
@@ -54,6 +58,8 @@ def has_semantic_results(result: dict) -> bool | None:
 
     retrieval_diagnostics = result.get("retrieval_diagnostics") or {}
     vector_matched_count = retrieval_diagnostics.get("vector_matched_count")
+    if vector_matched_count is None:
+        vector_matched_count = retrieval_diagnostics.get("vector_raw_count")
     if vector_matched_count is not None:
         return vector_matched_count > 0
 
@@ -69,6 +75,8 @@ def show_retrieval_behavior(result: dict):
         "fallback_reason": result.get("fallback_reason") or "None",
         "model": result.get("model") or "N/A",
         "matched_count": result.get("matched_count"),
+        "semantic_matched_count": result.get("semantic_matched_count"),
+        "index_status": result.get("index_status") or {},
         "used_priority_sections": result.get("used_priority_sections") or [],
     }
     st.json(behavior_fields)
@@ -84,7 +92,7 @@ def show_retrieval_behavior(result: dict):
 
 if st.button("Load Filings"):
     try:
-        cik = COMPANY_OPTIONS[company_label]
+        cik = COMPANY_OPTIONS[company_label]["cik"]
         filtered_filings = fetch_recent_filings(cik)
         st.session_state["filings"] = filtered_filings
         st.session_state["selected_company_cik"] = cik
