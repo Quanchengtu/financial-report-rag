@@ -1,7 +1,7 @@
 # 結合 rule-based & semantic retrieval，最後回傳最相關的財報chunk
 from app.services.retriever import retrieve_relevant_chunks
 from app.services.embedding_service import embed_text
-from app.services.vector_store import query_similar_chunks
+from app.services.vector_store import build_filing_where_filter, query_similar_chunks
 from app.services.sec_client import build_filing_urls, normalize_cik, fetch_filing_html
 from app.services.html_parser import extract_text_from_html
 from app.services.text_chunker import chunk_text
@@ -99,13 +99,11 @@ def hybrid_retrieve(
     try:
         query_embedding = embed_text(question)
 
-        where_filter = {   # 限定在同一份財報裡面找
-                "$and" :[
-                    {"cik": normalized_cik},
-                    {"accession_number": accession_number},
-                    {"primary_document": primary_document}
-                ]   
-        }
+        where_filter = build_filing_where_filter(   # 限定在同一份財報裡面找
+            cik=normalized_cik,
+            accession_number=accession_number,
+            primary_document=primary_document
+        )
         retrieval_diagnostics["semantic_attempted"] = True
         retrieval_diagnostics["vector_filter"] = where_filter
 
