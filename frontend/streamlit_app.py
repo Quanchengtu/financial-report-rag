@@ -154,15 +154,30 @@ if filings:
 
                 st.subheader("Evidence")
                 supporting_sentences = result.get("supporting_sentences", [])
-                if not supporting_sentences:
-                    st.info("No supporting sentences were returned.")
-                else:
+
+                sources = result.get("sources", [])
+                if supporting_sentences:
                     for idx, item in enumerate(supporting_sentences, start=1):
                         with st.expander(f"Evidence #{idx} | section: {item.get('section_name') or 'N/A'}"):
                             st.write(item.get("sentence", ""))
                             st.caption(
                                 f"chunk_index={item.get('chunk_index')} | chunk_rank={item.get('chunk_rank')} | sentence_score={item.get('sentence_score')}"
                             )
+                elif sources:
+                    st.info(
+                        "No sentence-level evidence was returned; showing retrieved source chunks instead."
+                    )
+                    for idx, source in enumerate(sources, start=1):
+                        source_rank = source.get("source_rank", idx)
+                        section_name = source.get("section_name") or "N/A"
+                        with st.expander(f"Source #{source_rank} | section: {section_name}"):
+                            st.write(source.get("text_excerpt", ""))
+                            st.caption(
+                                f"source_rank={source_rank} | section_name={section_name} | "
+                                f"chunk_index={source.get('chunk_index')} | score={source.get('score')}"
+                            )
+                else:
+                    st.info("No supporting sentences were returned.")
 
             except Exception as exc:
                 st.error(f"Failed to analyze filing: {exc}")
