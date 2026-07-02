@@ -304,6 +304,7 @@ def answer_question_from_filing(
                 answer_result = build_llm_grounded_answer(
                     question=question,
                     retrieved_chunks=retrieved_chunks,
+                    max_sentences=max_sentences,
                     temperature=llm_temperature,
                 )
                 model = answer_result.get("model")
@@ -400,6 +401,7 @@ def hybrid_answer_question_from_filing(
                 answer_result = build_llm_grounded_answer(
                     question=question,
                     retrieved_chunks=retrieved_chunks,
+                    max_sentences=max_sentences,
                     temperature=llm_temperature,
                 )
                 model = answer_result.get("model")

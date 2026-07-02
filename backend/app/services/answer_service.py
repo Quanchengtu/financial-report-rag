@@ -519,7 +519,8 @@ def build_llm_grounded_answer(
     question: str,
     retrieved_chunks: list[dict],
     max_context_chunks: int = RAG_LLM_MAX_CONTEXT_CHUNKS,
-    max_chars_per_chunk: int = RAG_LLM_MAX_CHARS_PER_CHUNK, #####
+    max_chars_per_chunk: int = RAG_LLM_MAX_CHARS_PER_CHUNK, ####
+    max_sentences: int = 4,
     temperature: float = 0.2,   # 控制 LLM 回答的隨機程度(低/穩定)
 ) -> dict:
     """Generate a grounded answer from retrieved chunks with LLM."""
@@ -542,6 +543,13 @@ def build_llm_grounded_answer(
 
     if not contexts:
         raise LLMServiceError("Retrieved chunks did not include usable text contexts.")
+
+    supporting_sentences = select_supporting_sentences(
+        question=question,
+        retrieved_chunks=selected_chunks,
+        max_sentences=max_sentences
+    )
+    detected_topics = detect_topics_from_sentences(supporting_sentences)
 
     # 呼叫 LLM 產生答案
     llm_result = generate_answer(
@@ -572,9 +580,9 @@ def build_llm_grounded_answer(
         "answer": llm_result["answer"],
         #"summary_answer": llm_result["answer"],
         "summary_answer": summary_answer,
-        "supporting_sentences": [],
+        "supporting_sentences": supporting_sentences,
         "sources": sources,
-        "detected_topics": [],
+        "detected_topics": detected_topics,
         "model": llm_result.get("model"),
         "usage": llm_result.get("usage", {}),
     }
