@@ -1,11 +1,32 @@
 # 將處理好的財報文字 chunks、embedding、metadata 存進 ChromaDB 
 # 且可用 query embedding 查出相似 chunks
-import chromadb
+# import chromadb
 from app.core.config import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME
 
+_chroma_client = None
+
 # 建立一個會把資料永久儲存在指定資料夾的 ChromaDB client
+'''
 def get_chroma_client():
     return chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)   # 要存放的資料夾 
+'''
+# 使用 lazy import，避免 FastAPI 啟動時因為沒安裝 chromadb 就直接失敗
+
+def get_chroma_client():
+    global _chroma_client
+
+    if _chroma_client is None:
+        try:
+            import chromadb
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "chromadb is not installed. "
+                "Please install full RAG dependencies before using vector store features."
+            ) from exc
+
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+
+    return _chroma_client
 
 
 def get_collection():   # 資料表
