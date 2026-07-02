@@ -72,7 +72,8 @@ financial-report-rag/
 │   ├── Dockerfile
 │   ├── .dockerignore
 │   ├── main.py
-│   ├── requirements.txt
+│   ├── requirements.txt         # lightweight dependencies
+│   ├── requirements-full.txt    # optional full RAG dependencies
 │   ├── app/
 │   │   ├── core/
 │   │   │   └── config.py
@@ -179,7 +180,7 @@ http://127.0.0.1:8000/docs
 
 ## Docker Deployment
 
-The backend includes a lightweight Dockerfile under `backend/Dockerfile`.
+The backend includes a lightweight Dockerfile under `backend/Dockerfile`. The image installs `backend/requirements.txt` only, so it is intended for lightweight API/server testing and does **not** include heavier optional full-RAG dependencies such as `chromadb`, `torch`, or `sentence-transformers`.
 
 From the repository root:
 
@@ -193,7 +194,7 @@ Run the backend container:
 docker run --rm -p 8000:8000 --env-file backend/.env financial-report-rag-backend
 ```
 
-If you want to persist the local ChromaDB/vector store data, mount a volume:
+If you build a custom full-dependency image and want to persist local ChromaDB/vector-store data, mount a volume:
 
 ```bash
 docker run --rm -p 8000:8000 \
@@ -202,7 +203,7 @@ docker run --rm -p 8000:8000 \
   financial-report-rag-backend
 ```
 
-The `.dockerignore` file excludes local environment files, virtual environments, Git metadata, and local vector-store data from the image.
+The `.dockerignore` file excludes local environment files, virtual environments, Git metadata, and local vector-store data from the image. To run the full semantic retrieval stack in Docker, update the image to install `requirements-full.txt` and account for the larger build/runtime footprint.
 
 ## Streamlit Demo UI
 
@@ -386,4 +387,4 @@ Current tests cover answer generation helpers, indexing behavior, retrieval beha
 
 This project is focused on backend experimentation for SEC filing retrieval, text extraction, chunking, retrieval, and grounded financial-report Q&A.
 
-The lightweight setup is suitable for local API testing and Docker deployment. Semantic retrieval and LLM-backed answers are optional extensions that may require extra dependencies and API credentials.
+The lightweight setup is suitable for local API testing and Docker deployment. Semantic retrieval and LLM-backed answers are optional extensions that may require extra dependencies and API credentials.The lightweight setup is suitable for local API testing and lightweight Docker deployment. Full semantic retrieval and LLM-backed answers are optional extensions that may require `requirements-full.txt`, extra runtime resources, and API credentials.
