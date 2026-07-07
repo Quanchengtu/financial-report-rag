@@ -10,15 +10,43 @@ SECTION_PATTERNS = [
     ("item_7a_market_risk", r"\bitem\s+7a\.?\s+quantitative\s+and\s+qualitative\s+disclosures\s+about\s+market\s+risk\b"),
 ]
 
+SECTION_QUERY_KEYWORDS = {
+    "item_1a_risk_factors": [
+        "risk factors", "risk factor", "key risks", "major risks",
+        "風險因素", "主要風險", "重大風險", "有哪些風險", "風險",
+    ],
+    "item_7a_market_risk": [
+        "market risk", "interest rate", "foreign exchange", "fx", "commodity",
+        "市場風險", "利率", "匯率", "外匯", "商品價格",
+    ],
+    "item_7_mda": [
+        "management discussion", "results of operations", "mda", "md&a",
+        "revenue", "gross margin", "operating", "cash flow", "liquidity",
+        "capital expenditure", "capex", "營收", "收入", "毛利", "毛利率",
+        "營運", "經營結果", "現金流", "流動性", "資本支出", "財務表現",
+    ],
+    "item_1_business": [
+        "business", "product", "service", "customer", "business model",
+        "業務", "商業模式", "產品", "服務", "客戶",
+    ],
+    "item_3_legal_proceedings": [
+        "legal proceedings", "litigation", "lawsuit", "regulatory", "compliance",
+        "法律程序", "訴訟", "官司", "監管", "法規", "合規",
+    ],
+}
+
 
 def normalize_for_section_search(text: str) -> str:
     """
-    給 section 標題搜尋用的簡化版本   
+    給 section 標題搜尋用的簡化版本。
+
+    Keep the returned string the same length as the original text so regex match
+    offsets can safely be used to slice the original filing text.  Collapsing
+    whitespace here would make every offset after the first newline/tab drift and
+    cause chunks to be assigned to the wrong SEC item.
     """
-    lowered = text.lower()
-    lowered = lowered.replace("’", "'")
-    lowered = re.sub(r"\s+", " ", lowered)   # 多空格壓成一個空格
-    return lowered
+    lowered = text.lower().replace("’", "'").replace("`", "'")
+    return re.sub(r"\s", " ", lowered)
 
 
 def find_section_boundaries(text: str) -> list[dict]:
@@ -28,7 +56,6 @@ def find_section_boundaries(text: str) -> list[dict]:
     [
       {"section_name": "...", "start": 1000, "end": 2500},
       ...
-    ]
     ]
     """
     normalized = normalize_for_section_search(text)   # 將文字轉成較容易搜尋的格式
@@ -88,37 +115,33 @@ def extract_sections(text: str) -> list[dict]:
     return sections
 
 
+def _contains_any(text: str, keywords: list[str]) -> bool:
+    for keyword in keywords:
+        if keyword == "利率":
+            # Avoid treating 毛利率 (gross margin) as 利率 (interest rate).
+            if re.search(r"(?<!毛)利率", text):
+                return True
+            continue
+        if keyword in text:
+            return True
+    return False
+
+
 def get_priority_sections_for_question(question: str) -> list[str]:
     """
-    根據問題內容，回傳優先搜尋的章節名稱
+    根據問題內容，回傳優先搜尋的章節名稱。
+
+    Route common filing topics to their most relevant SEC sections. Chinese
+    aliases are included for the bilingual UI, but the routing itself applies to
+    both English and Chinese questions so broad retrieval does not over-select
+    Item 1A for non-risk topics.
     """
     q = question.lower()
 
     priorities = []
- 
-    # 1) Risk factors
-    if any(k in q for k in ["risk factors", "risk factor", "key risks", "major risks"]):
-        priorities.append("item_1a_risk_factors")
-
-    # 2) Market risk (interest rate/FX/commodity)
-    if any(k in q for k in ["market risk", "interest rate", "foreign exchange", "fx", "commodity"]):
-        priorities.append("item_7a_market_risk")
-
-    # 3) Operating and financial performance (MD&A)
-    if any(k in q for k in [
-        "management discussion", "results of operations", "mda", "md&a",
-        "revenue", "gross margin", "operating", "cash flow", "liquidity",
-        "capital expenditure", "capex"
-    ]):
-        priorities.append("item_7_mda")
-
-    # 4) Business model / products / customers
-    if any(k in q for k in ["business", "product", "service", "customer", "business model"]):
-        priorities.append("item_1_business")
-
-    # 5) Legal / regulatory
-    if any(k in q for k in ["legal proceedings", "litigation", "lawsuit", "regulatory", "compliance"]):
-        priorities.append("item_3_legal_proceedings")
+    for section_name, keywords in SECTION_QUERY_KEYWORDS.items():
+        if _contains_any(q, keywords):
+            priorities.append(section_name)
 
     # 去重且保序
     return list(dict.fromkeys(priorities))
