@@ -3,6 +3,31 @@
 import re
 from collections import Counter
 
+
+QUERY_TOKEN_ALIASES = {
+    "營收": ["revenue", "sales"],
+    "收入": ["revenue", "sales"],
+    "毛利": ["gross", "margin"],
+    "毛利率": ["gross", "margin"],
+    "現金流": ["cash", "flow"],
+    "流動性": ["liquidity"],
+    "資本支出": ["capital", "expenditure", "capex"],
+    "產品": ["product", "products"],
+    "客戶": ["customer", "customers"],
+    "業務": ["business"],
+    "商業模式": ["business", "model"],
+    "風險": ["risk", "risks"],
+    "風險因素": ["risk", "factors"],
+    "市場風險": ["market", "risk"],
+    "利率": ["interest", "rate"],
+    "匯率": ["foreign", "exchange"],
+    "外匯": ["foreign", "exchange"],
+    "法律": ["legal"],
+    "訴訟": ["litigation", "lawsuit"],
+    "監管": ["regulatory"],
+    "合規": ["compliance"],
+}
+
 STOPWORDS = {   # 移除對搜尋幫助不大的字
     "the", "is", "are", "a", "an", "of", "to", "in", "on", "at", "for", "and",
     "or", "but", "if", "then", "than", "with", "by", "as", "from", "that",
@@ -22,13 +47,19 @@ def normalize_text(text: str) -> str:
 
 def tokenize(text: str) -> list[str]:           # 切成關鍵字
     normalized = normalize_text(text)
-    if not normalized:
-        return []
-
-    return [
+    tokens = [
         token for token in normalized.split()  # 用空白切成字串
         if token not in STOPWORDS and len(token) > 1
     ]
+
+    # normalize_text intentionally strips non-English characters for matching
+    # against SEC filings.  Add English aliases for common Chinese finance terms
+    # so Chinese questions still produce useful rule-based retrieval tokens.
+    for phrase, aliases in QUERY_TOKEN_ALIASES.items():
+        if phrase in text:
+            tokens.extend(aliases)
+
+    return tokens
 
 
 def get_query_phrases(question: str) -> list[str]:   # 將問題中的token（單個字）組成一句片語
