@@ -94,6 +94,7 @@ def hybrid_retrieve(
         "semantic_error": None,
         "vector_filter": None,
         "vector_raw_count": 0,
+        "semantic_filtered_by_priority_count": 0,
     }
 
     try:
@@ -121,10 +122,16 @@ def hybrid_retrieve(
         metadatas = vector_results.get("metadatas", [[]])[0]
         distances = vector_results.get("distances", [[]])[0]   # 距離越小代表越相似
 
+        priority_section_set = set(priority_sections)
         for doc, metadata, distance in zip(docs, metadatas, distances):
+            section_name = metadata.get("section_name")
+            if priority_section_set and section_name not in priority_section_set:
+                retrieval_diagnostics["semantic_filtered_by_priority_count"] += 1
+                continue
+
             semantic_results.append({
                 "chunk_index": metadata.get("chunk_index"),
-                "section_name": metadata.get("section_name"),
+                "section_name": section_name,
                 "score": 100 - int(distance * 100) if distance is not None else 0,   # 把 distance 轉成分數，距離越小分數會越高
                 "matched_terms": ["semantic_match"],
                 "text": doc

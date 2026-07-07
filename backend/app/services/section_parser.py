@@ -131,9 +131,10 @@ def get_priority_sections_for_question(question: str) -> list[str]:
     """
     根據問題內容，回傳優先搜尋的章節名稱。
 
-    The Streamlit UI accepts Chinese questions, so include common Chinese finance
-    aliases; otherwise Chinese queries often have no priority section and fall
-    back to broad whole-document retrieval, which tends to over-select Item 1A.
+    Route common filing topics to their most relevant SEC sections. Chinese
+    aliases are included for the bilingual UI, but the routing itself applies to
+    both English and Chinese questions so broad retrieval does not over-select
+    Item 1A for non-risk topics.
     """
     q = question.lower()
 
