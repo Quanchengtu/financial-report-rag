@@ -12,9 +12,27 @@ from app.services.indexing_service import ensure_filing_indexed, get_index_statu
 from app.services.answer_service import build_grounded_answer, build_llm_grounded_answer
 from app.services.hybrid_retrieval import hybrid_retrieve
 from app.services.llm_service import LLMServiceError
+from app.services.langchain_query_service import rewrite_question_for_retrieval
 from app.core.config import RAG_LLM_ENABLED, RAG_LLM_TEMPERATURE
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
+
+
+@router.get("/langchain-query-rewrite")
+def langchain_query_rewrite(
+    question: str = Query(..., description="User question to rewrite for filing retrieval"),
+    llm_temperature: float = Query(RAG_LLM_TEMPERATURE, ge=0.0, le=1.0, description="LLM temperature"),
+):
+    """Rewrite a question with LangChain without changing the existing RAG answer flow."""
+    try:
+        return rewrite_question_for_retrieval(
+            question=question,
+            temperature=llm_temperature,
+        )
+    except LLMServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rewrite query with LangChain: {str(e)}")
 
 
 @router.get("/retrieve")
