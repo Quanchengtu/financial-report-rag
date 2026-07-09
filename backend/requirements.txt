@@ -4,6 +4,8 @@ requests
 python-dotenv
 pydantic
 beautifulsoup4
+langchain-core==0.2.43
+langchain-openai==0.1.25
 # chromadb   # VectorDB
 
 
