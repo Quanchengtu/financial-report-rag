@@ -1,0 +1,142 @@
+[
+  {
+    "id": 1,
+    "language": "en",
+    "category": "Business",
+    "expected_section": "Item 1",
+    "question": "What products does NVIDIA primarily offer?"
+  },
+  {
+    "id": 2,
+    "language": "zh",
+    "category": "Business",
+    "expected_section": "Item 1",
+    "question": "NVIDIA 的主要產品有哪些？"
+  },
+  {
+    "id": 3,
+    "language": "en",
+    "category": "Business",
+    "expected_section": "Item 1",
+    "question": "What are NVIDIA's primary business segments?"
+  },
+  {
+    "id": 4,
+    "language": "zh",
+    "category": "Business",
+    "expected_section": "Item 1",
+    "question": "NVIDIA 的主要業務部門有哪些？"
+  },
+  {
+    "id": 5,
+    "language": "en",
+    "category": "Risk Factors",
+    "expected_section": "Item 1A",
+    "question": "What supply chain risks does NVIDIA mention?"
+  },
+  {
+    "id": 6,
+    "language": "zh",
+    "category": "Risk Factors",
+    "expected_section": "Item 1A",
+    "question": "NVIDIA 提到哪些供應鏈風險？"
+  },
+  {
+    "id": 7,
+    "language": "en",
+    "category": "Risk Factors",
+    "expected_section": "Item 1A",
+    "question": "What risks related to competition are described?"
+  },
+  {
+    "id": 8,
+    "language": "zh",
+    "category": "Risk Factors",
+    "expected_section": "Item 1A",
+    "question": "財報中提到哪些市場競爭風險？"
+  },
+  {
+    "id": 9,
+    "language": "en",
+    "category": "MD&A",
+    "expected_section": "Item 7",
+    "question": "What were the main drivers of revenue growth?"
+  },
+  {
+    "id": 10,
+    "language": "zh",
+    "category": "MD&A",
+    "expected_section": "Item 7",
+    "question": "營收成長的主要原因是什麼？"
+  },
+  {
+    "id": 11,
+    "language": "en",
+    "category": "MD&A",
+    "expected_section": "Item 7",
+    "question": "What factors affected operating expenses?"
+  },
+  {
+    "id": 12,
+    "language": "zh",
+    "category": "MD&A",
+    "expected_section": "Item 7",
+    "question": "哪些因素影響了營業費用？"
+  },
+  {
+    "id": 13,
+    "language": "en",
+    "category": "Financial Statements",
+    "expected_section": "Financial Statements",
+    "question": "What was NVIDIA's total revenue?"
+  },
+  {
+    "id": 14,
+    "language": "zh",
+    "category": "Financial Statements",
+    "expected_section": "Financial Statements",
+    "question": "NVIDIA 的總營收是多少？"
+  },
+  {
+    "id": 15,
+    "language": "en",
+    "category": "Financial Statements",
+    "expected_section": "Financial Statements",
+    "question": "What was NVIDIA's net income?"
+  },
+  {
+    "id": 16,
+    "language": "zh",
+    "category": "Financial Statements",
+    "expected_section": "Financial Statements",
+    "question": "NVIDIA 的淨利是多少？"
+  },
+  {
+    "id": 17,
+    "language": "en",
+    "category": "Strategy",
+    "expected_section": "Item 1",
+    "question": "How does NVIDIA describe its AI strategy?"
+  },
+  {
+    "id": 18,
+    "language": "zh",
+    "category": "Strategy",
+    "expected_section": "Item 1",
+    "question": "NVIDIA 如何描述公司的 AI 策略？"
+  },
+  {
+    "id": 19,
+    "language": "en",
+    "category": "Future Outlook",
+    "expected_section": "Item 7",
+    "question": "What factors could impact NVIDIA's future financial performance?"
+  },
+  {
+    "id": 20,
+    "language": "zh",
+    "category": "Future Outlook",
+    "expected_section": "Item 7",
+    "question": "哪些因素可能影響 NVIDIA 未來的財務表現？"
+  }
+]
