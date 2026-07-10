@@ -13,4 +13,4 @@ Current metrics
 
 Dataset
 
-Currently contains 10 manually designed questions.
+Currently contains 20 manually designed English and Chinese questions.
