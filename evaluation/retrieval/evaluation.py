@@ -1,4 +1,6 @@
 import json
+import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -201,6 +203,79 @@ def get_chunk_score(chunk: dict[str, Any]) -> str:
 
 
 # ============================================================
+# Retrieval scoring
+# ============================================================
+
+def normalize_text(value: Any) -> str:
+    """
+    將文字正規化，方便做不分大小寫與空白差異的比對。
+    """
+
+    return re.sub(r"\s+", " ", str(value).strip().lower())
+
+
+def section_matches(actual_section: str, expected_section: str) -> bool:
+    """
+    判斷 chunk section 是否包含或近似符合 expected section。
+    """
+
+    actual = normalize_text(actual_section)
+    expected = normalize_text(expected_section)
+
+    if not actual or not expected:
+        return False
+
+    if expected in actual or actual in expected:
+        return True
+
+    return SequenceMatcher(None, actual, expected).ratio() >= 0.8
+
+
+def keyword_matches(text: str, expected_keywords: list[Any]) -> bool:
+    """
+    判斷 chunk text 是否包含任一 expected keyword。
+    """
+
+    normalized_text = normalize_text(text)
+
+    return any(
+        normalize_text(keyword) in normalized_text
+        for keyword in expected_keywords
+        if normalize_text(keyword)
+    )
+
+
+def evaluate_retrieval_success(
+    question_data: dict[str, Any],
+    chunks: list[dict[str, Any]],
+) -> bool:
+    """
+    評估 Top K chunks 是否命中預期 section，且包含任一預期 keyword。
+    """
+
+    expected_section = question_data.get("expected_section")
+    expected_keywords = question_data.get("expected_keywords", [])
+
+    if isinstance(expected_keywords, str):
+        expected_keywords = [expected_keywords]
+
+    if not isinstance(expected_section, str) or not isinstance(expected_keywords, list):
+        return False
+
+    for chunk in chunks[:TOP_K]:
+        chunk_section = get_chunk_section(chunk)
+        chunk_text = get_chunk_text(chunk)
+
+        if section_matches(chunk_section, expected_section) and keyword_matches(
+            chunk_text,
+            expected_keywords,
+        ):
+            return True
+
+    return False
+
+
+# ============================================================
 # 印出單一問題的結果
 # ============================================================
 
@@ -218,6 +293,15 @@ def print_question_header(question_data: dict[str, Any]) -> None:
     print(f"Expected Keywords : {question_data.get('expected_keywords', [])}")
     print(f"Question          : {question_data.get('question', '')}")
     print("=" * 90)
+
+
+def print_retrieval_success(success: bool) -> None:
+    """
+    印出單題 retrieval scoring 結果。
+    """
+
+    status = "PASS" if success else "FAIL"
+    print(f"\nRetrieval Success: {status}")
 
 
 def print_chunks(chunks: list[dict[str, Any]]) -> None:
@@ -249,12 +333,12 @@ def print_chunks(chunks: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     """
-    第一版 retrieval evaluation：
+    Retrieval evaluation：
 
     1. 讀取 questions.json
     2. 逐題呼叫 Retrieval API
     3. 印出 Top 3 retrieval chunks
-    4. 不進行自動評分
+    4. 根據 expected section 與 expected keywords 印出 retrieval success
     """
 
     print("Loading evaluation questions...")
@@ -287,7 +371,9 @@ def main() -> None:
             chunks = extract_chunks(result)
 
             print_chunks(chunks)
-
+            success = evaluate_retrieval_success(question_data, chunks)
+            print_retrieval_success(success)
+            
             # 暫時保留 raw response 檢查功能。
             # 如果 chunks 一直抓不到，可以把下面這幾行取消註解。
             #
