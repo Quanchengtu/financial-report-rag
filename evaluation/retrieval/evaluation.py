@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ REQUEST_TIMEOUT = 120
 # questions.json 和 evaluate.py 放在同一個 evaluation 資料夾
 CURRENT_DIR = Path(__file__).resolve().parent
 QUESTIONS_FILE = CURRENT_DIR / "questions.json"
-
+RESULTS_DIR = CURRENT_DIR / "results"
 
 # ============================================================
 # 讀取測試問題
@@ -201,6 +202,121 @@ def get_chunk_score(chunk: dict[str, Any]) -> str:
 
     return "N/A"
 
+# ============================================================
+# 建立 JSON report 內容
+# ============================================================
+
+def find_matched_keywords(chunks: list[dict[str, Any]], expected_keywords: Any) -> list[str]:
+    """
+    從 Top K chunks 文字中找出命中的 expected keywords。
+    """
+
+    if not isinstance(expected_keywords, list):
+        return []
+
+    combined_text = "\n".join(
+        get_chunk_text(chunk) for chunk in chunks[:TOP_K]
+    ).casefold()
+
+    matched_keywords = []
+
+    for keyword in expected_keywords:
+        if not isinstance(keyword, str):
+            continue
+
+        if keyword.casefold() in combined_text:
+            matched_keywords.append(keyword)
+
+    return matched_keywords
+
+
+def is_expected_section_found(chunks: list[dict[str, Any]], expected_section: Any) -> bool:
+    """
+    檢查 Top K chunks 是否包含 expected section。
+    """
+
+    if expected_section is None:
+        return False
+
+    expected_section_text = str(expected_section).casefold()
+
+    return any(
+        expected_section_text in get_chunk_section(chunk).casefold()
+        for chunk in chunks[:TOP_K]
+    )
+
+
+def build_top_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    將 API chunks 轉成 JSON report 使用的穩定格式。
+    """
+
+    top_chunks = []
+
+    for rank, chunk in enumerate(chunks[:TOP_K], start=1):
+        top_chunks.append(
+            {
+                "rank": rank,
+                "section": get_chunk_section(chunk),
+                "score": get_chunk_score(chunk),
+                "text": get_chunk_text(chunk),
+            }
+        )
+
+    return top_chunks
+
+
+def build_result_record(
+    question_data: dict[str, Any],
+    chunks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """
+    建立單題 retrieval evaluation result。
+
+    retrieval_success 代表 Top K chunks 至少命中 expected section
+    或任一 expected keyword。
+    """
+
+    if chunks is None:
+        chunks = []
+
+    expected_keywords = question_data.get("expected_keywords", [])
+    matched_keywords = find_matched_keywords(chunks, expected_keywords)
+    section_found = is_expected_section_found(
+        chunks,
+        question_data.get("expected_section"),
+    )
+
+    return {
+        "id": question_data.get("id"),
+        "language": question_data.get("language"),
+        "category": question_data.get("category"),
+        "question": question_data.get("question"),
+        "expected_section": question_data.get("expected_section"),
+        "expected_keywords": expected_keywords,
+        "retrieval_success": section_found or bool(matched_keywords),
+        "matched_keywords": matched_keywords,
+        "top_chunks": build_top_chunks(chunks),
+    }
+
+
+def write_results_report(results: list[dict[str, Any]]) -> Path:
+    """
+    將 evaluation results 寫入 timestamped JSON report。
+    """
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_path = RESULTS_DIR / f"retrieval_eval_{timestamp}.json"
+
+    with report_path.open("w", encoding="utf-8") as file:
+        json.dump(results, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+
+    return report_path
+
+
 
 # ============================================================
 # Retrieval scoring
@@ -355,6 +471,7 @@ def main() -> None:
 
     successful_requests = 0
     failed_requests = 0
+    results = []
 
     for question_data in questions:
         question = question_data.get("question")
@@ -363,6 +480,7 @@ def main() -> None:
 
         if not isinstance(question, str) or not question.strip():
             print("Skipped: question 欄位不存在或內容為空。")
+            results.append(build_result_record(question_data))
             failed_requests += 1
             continue
 
@@ -371,9 +489,10 @@ def main() -> None:
             chunks = extract_chunks(result)
 
             print_chunks(chunks)
+            results.append(build_result_record(question_data, chunks))
             success = evaluate_retrieval_success(question_data, chunks)
             print_retrieval_success(success)
-            
+
             # 暫時保留 raw response 檢查功能。
             # 如果 chunks 一直抓不到，可以把下面這幾行取消註解。
             #
@@ -387,12 +506,14 @@ def main() -> None:
                 "\nRequest failed: 無法連線到 Retrieval API。\n"
                 "請確認 FastAPI 已經在 http://127.0.0.1:8000 執行。"
             )
+            results.append(build_result_record(question_data))
             failed_requests += 1
 
         except requests.exceptions.Timeout:
             print(
                 f"\nRequest failed: API 超過 {REQUEST_TIMEOUT} 秒沒有回應。"
             )
+            results.append(build_result_record(question_data))
             failed_requests += 1
 
         except requests.exceptions.HTTPError as error:
@@ -402,15 +523,20 @@ def main() -> None:
                 print("API response:")
                 print(error.response.text)
 
+            results.append(build_result_record(question_data))
             failed_requests += 1
 
         except requests.exceptions.RequestException as error:
             print(f"\nRequest failed: {error}")
+            results.append(build_result_record(question_data))
             failed_requests += 1
 
         except (ValueError, TypeError, KeyError) as error:
             print(f"\nFailed to process API response: {error}")
+            results.append(build_result_record(question_data))
             failed_requests += 1
+
+    report_path = write_results_report(results)
 
     print("\n")
     print("=" * 90)
@@ -418,6 +544,7 @@ def main() -> None:
     print(f"Total questions     : {len(questions)}")
     print(f"Successful requests : {successful_requests}")
     print(f"Failed requests     : {failed_requests}")
+    print(f"JSON report         : {report_path}")
     print("=" * 90)
 
 
