@@ -9,7 +9,7 @@ import requests
 # 基本設定
 # ============================================================
 
-API_URL = "http://127.0.0.1:8000/retrieve"
+API_URL = "http://127.0.0.1:8000/rag/retrieve"
 
 # 請換成你目前測試的 NVIDIA 財報資料
 CIK = "1045810"
@@ -55,7 +55,7 @@ def load_questions(file_path: Path) -> list[dict[str, Any]]:
 
 def call_retrieval_api(question: str) -> dict[str, Any]:
     """
-    呼叫專案目前的 GET /retrieve API。
+    呼叫專案目前的 GET /rag/retrieve API。
     """
 
     params = {
