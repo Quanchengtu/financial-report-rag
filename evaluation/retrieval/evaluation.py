@@ -11,10 +11,10 @@ import requests
 
 API_URL = "http://127.0.0.1:8000/rag/retrieve"
 
-# 請換成你目前測試的 NVIDIA 財報資料
+# 可更換成目前測試的 NVIDIA 財報資料
 CIK = "1045810"
-ACCESSION_NUMBER = "請填入 accession number"
-PRIMARY_DOCUMENT = "請填入 primary document"
+ACCESSION_NUMBER = "0001045810-26-000021" 
+PRIMARY_DOCUMENT = "nvda-20260125.htm"
 
 TOP_K = 3
 REQUEST_TIMEOUT = 120
