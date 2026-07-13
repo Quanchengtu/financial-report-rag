@@ -25,3 +25,12 @@ def test_chinese_questions_map_to_financial_priority_sections():
     assert get_priority_sections_for_question("公司的營收和毛利率如何？") == ["item_7_mda"]
     assert get_priority_sections_for_question("公司有哪些主要風險？") == ["item_1a_risk_factors"]
     assert get_priority_sections_for_question("產品和客戶有哪些？") == ["item_1_business"]
+
+
+def test_financial_statement_questions_map_to_item_8():
+    assert get_priority_sections_for_question("What was NVIDIA's total revenue?") == [
+        "item_8_financial_statements"
+    ]
+    assert get_priority_sections_for_question("NVIDIA 的淨利是多少？") == [
+        "item_8_financial_statements"
+    ]

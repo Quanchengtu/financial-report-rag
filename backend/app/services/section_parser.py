@@ -8,6 +8,7 @@ SECTION_PATTERNS = [
     ("item_3_legal_proceedings", r"\bitem\s+3\.?\s+legal\s+proceedings\b"),
     ("item_7_mda", r"\bitem\s+7\.?\s+management[’'`s\s]+discussion\s+and\s+analysis\b"),
     ("item_7a_market_risk", r"\bitem\s+7a\.?\s+quantitative\s+and\s+qualitative\s+disclosures\s+about\s+market\s+risk\b"),
+    ("item_8_financial_statements", r"\bitem\s+8\.?\s+financial\s+statements\s+and\s+supplementary\s+data\b"),
 ]
 
 SECTION_QUERY_KEYWORDS = {
@@ -19,11 +20,18 @@ SECTION_QUERY_KEYWORDS = {
         "market risk", "interest rate", "foreign exchange", "fx", "commodity",
         "市場風險", "利率", "匯率", "外匯", "商品價格",
     ],
+    "item_8_financial_statements": [
+        "total revenue", "net income", "earnings", "consolidated statements",
+        "statements of income", "financial statements", "總營收", "淨利",
+        "淨收入", "盈餘", "財務報表",
+    ],
     "item_7_mda": [
         "management discussion", "results of operations", "mda", "md&a",
-        "revenue", "gross margin", "operating", "cash flow", "liquidity",
-        "capital expenditure", "capex", "營收", "收入", "毛利", "毛利率",
+        "revenue growth", "gross margin", "operating expenses", "cash flow", "liquidity",
+        "capital expenditure", "capex", "future financial performance",
+        "營收成長", "收入成長", "毛利", "毛利率", "營業費用",
         "營運", "經營結果", "現金流", "流動性", "資本支出", "財務表現",
+        "未來財務表現",
     ],
     "item_1_business": [
         "business", "product", "service", "customer", "business model",

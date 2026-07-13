@@ -49,3 +49,21 @@ def test_chinese_financial_terms_expand_to_english_tokens():
     assert results
     assert results[0]["section_name"] == "item_7_mda"
     assert "revenue" in results[0]["matched_terms"]
+
+
+def test_chinese_expected_terms_expand_for_financial_statement_questions():
+    results = retrieve_relevant_chunks(
+        question="NVIDIA 的淨利是多少？",
+        chunks=[
+            {
+                "chunk_index": 0,
+                "section_name": "item_8_financial_statements",
+                "text": "Consolidated Statements of Income show net income and earnings for the fiscal year. " * 3,
+            }
+        ],
+        top_k=1,
+    )
+
+    assert results
+    assert results[0]["section_name"] == "item_8_financial_statements"
+    assert "income" in results[0]["matched_terms"]
