@@ -6,12 +6,35 @@ from collections import Counter
 
 QUERY_TOKEN_ALIASES = {
     "營收": ["revenue", "sales"],
+    "總營收": ["total", "revenue", "sales"],
     "收入": ["revenue", "sales"],
+    "營收成長": ["revenue", "growth"],
     "毛利": ["gross", "margin"],
     "毛利率": ["gross", "margin"],
     "現金流": ["cash", "flow"],
     "流動性": ["liquidity"],
     "資本支出": ["capital", "expenditure", "capex"],
+    "淨利": ["net", "income", "earnings"],
+    "淨收入": ["net", "income"],
+    "盈餘": ["earnings", "income"],
+    "會計年度": ["fiscal", "year"],
+    "資料中心": ["data", "center"],
+    "遊戲": ["gaming"],
+    "運算與網路": ["compute", "networking"],
+    "繪圖": ["graphics"],
+    "業務部門": ["business", "segments"],
+    "供應鏈": ["supply", "chain"],
+    "製造": ["manufacturing"],
+    "供應商": ["suppliers"],
+    "競爭": ["competition", "competitors"],
+    "競爭對手": ["competitors"],
+    "市場占有率": ["market", "share"],
+    "需求": ["demand"],
+    "研發": ["research", "development"],
+    "薪酬": ["compensation"],
+    "加速運算": ["accelerated", "computing"],
+    "平台": ["platform"],
+    "市場狀況": ["market", "conditions"],
     "產品": ["product", "products"],
     "客戶": ["customer", "customers"],
     "業務": ["business"],
@@ -151,7 +174,9 @@ def score_chunk(question: str, chunk_text: str, section_name: str | None = None)
             raw_score += 6
         elif any(k in q for k in ["legal proceedings", "litigation", "lawsuit", "regulatory", "compliance"]) and section_name == "item_3_legal_proceedings":
             raw_score += 6
-        elif any(k in q for k in ["revenue", "gross margin", "cash flow", "liquidity", "capital expenditure", "capex"]) and section_name == "item_7_mda":
+        elif any(k in q for k in ["total revenue", "net income", "earnings"]) and section_name == "item_8_financial_statements":
+            raw_score += 8
+        elif any(k in q for k in ["revenue growth", "gross margin", "operating expenses", "cash flow", "liquidity", "capital expenditure", "capex", "future financial performance"]) and section_name == "item_7_mda":
             raw_score += 6
 
     # 對 cross-reference (引用）型 chunk “扣分”  

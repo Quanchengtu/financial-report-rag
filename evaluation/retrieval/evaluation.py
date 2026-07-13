@@ -23,6 +23,54 @@ TOP_K = 3
 REQUEST_TIMEOUT = 120
 
 
+SECTION_ALIASES = {
+    "item 1": ["item_1_business", "item 1 business", "business"],
+    "item 1a": ["item_1a_risk_factors", "item 1a risk factors", "risk factors"],
+    "item 7": ["item_7_mda", "item 7 mda", "management discussion", "md&a"],
+    "financial statements": [
+        "item_8_financial_statements",
+        "item 8 financial statements",
+        "financial statements",
+    ],
+}
+
+KEYWORD_ALIASES = {
+    "資料中心": ["data center"],
+    "遊戲": ["gaming"],
+    "運算與網路": ["compute & networking", "compute and networking", "compute networking"],
+    "繪圖": ["graphics"],
+    "業務部門": ["business segments", "segments"],
+    "供應鏈": ["supply chain"],
+    "製造": ["manufacturing"],
+    "供應商": ["suppliers", "supplier"],
+    "競爭": ["competition"],
+    "競爭對手": ["competitors", "competitor"],
+    "市場占有率": ["market share"],
+    "營收成長": ["revenue growth", "revenue increased"],
+    "需求": ["demand"],
+    "營業費用": ["operating expenses"],
+    "研發": ["research and development", "r&d"],
+    "薪酬": ["compensation"],
+    "營收": ["revenue"],
+    "總營收": ["total revenue"],
+    "會計年度": ["fiscal year"],
+    "淨利": ["net income"],
+    "盈餘": ["earnings"],
+    "加速運算": ["accelerated computing"],
+    "平台": ["platform"],
+    "未來財務表現": ["future financial performance"],
+    "市場狀況": ["market conditions"],
+}
+
+FAILURE_TYPE_DESCRIPTIONS = {
+    "section_routing": "Expected section was not present in the Top K chunks.",
+    "keyword_mismatch": "Expected section was present, but expected keywords or aliases were not found.",
+    "chinese_retrieval_weak": "Chinese question did not retrieve equivalent English filing terminology.",
+    "financial_statement_routing": "Financial-statement question was not routed to Item 8 / financial statement content.",
+    "chunk_quality": "Retrieved chunk is empty, too short, or likely too noisy to answer reliably.",
+}
+
+
 # questions.json 和 evaluate.py 放在同一個 evaluation 資料夾
 CURRENT_DIR = Path(__file__).resolve().parent
 QUESTIONS_FILE = CURRENT_DIR / "questions.json"
@@ -224,7 +272,8 @@ def find_matched_keywords(chunks: list[dict[str, Any]], expected_keywords: Any) 
         if not isinstance(keyword, str):
             continue
 
-        if keyword.casefold() in combined_text:
+        keyword_variants = [keyword, *KEYWORD_ALIASES.get(keyword, [])]
+        if any(variant.casefold() in combined_text for variant in keyword_variants):
             matched_keywords.append(keyword)
 
     return matched_keywords
@@ -239,9 +288,10 @@ def is_expected_section_found(chunks: list[dict[str, Any]], expected_section: An
         return False
 
     expected_section_text = str(expected_section).casefold()
+    accepted_sections = [expected_section_text, *SECTION_ALIASES.get(expected_section_text, [])]
 
     return any(
-        expected_section_text in get_chunk_section(chunk).casefold()
+        any(accepted in get_chunk_section(chunk).casefold() for accepted in accepted_sections)
         for chunk in chunks[:TOP_K]
     )
 
@@ -264,6 +314,47 @@ def build_top_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
 
     return top_chunks
+
+
+def classify_failure_types(
+    question_data: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    matched_keywords: list[str],
+    section_found: bool,
+) -> list[str]:
+    """Classify failed retrieval cases into actionable error categories."""
+
+    failure_types = []
+    if section_found and matched_keywords:
+        return failure_types
+
+    category = str(question_data.get("category", "")).casefold()
+    language = str(question_data.get("language", "")).casefold()
+    expected_section = str(question_data.get("expected_section", "")).casefold()
+
+    if not section_found:
+        failure_types.append("section_routing")
+
+    if section_found and not matched_keywords:
+        failure_types.append("keyword_mismatch")
+
+    if language == "zh" and not matched_keywords:
+        failure_types.append("chinese_retrieval_weak")
+
+    if (
+        category == "financial statements"
+        or expected_section == "financial statements"
+    ) and not any(
+        "financial" in get_chunk_section(chunk).casefold()
+        or "item_8" in get_chunk_section(chunk).casefold()
+        for chunk in chunks[:TOP_K]
+    ):
+        failure_types.append("financial_statement_routing")
+
+    if not chunks or any(len(get_chunk_text(chunk).strip()) < 80 for chunk in chunks[:TOP_K]):
+        failure_types.append("chunk_quality")
+
+    return list(dict.fromkeys(failure_types))
 
 
 def build_result_record(
@@ -294,8 +385,16 @@ def build_result_record(
         "question": question_data.get("question"),
         "expected_section": question_data.get("expected_section"),
         "expected_keywords": expected_keywords,
-        "retrieval_success": section_found or bool(matched_keywords),
+        "retrieval_success": section_found and bool(matched_keywords),
         "matched_keywords": matched_keywords,
+        "section_found": section_found,
+        "failure_types": classify_failure_types(
+            question_data,
+            chunks,
+            matched_keywords,
+            section_found,
+        ),
+        "failure_type_descriptions": FAILURE_TYPE_DESCRIPTIONS,
         "top_chunks": build_top_chunks(chunks),
     }
 
@@ -341,10 +440,15 @@ def section_matches(actual_section: str, expected_section: str) -> bool:
     if not actual or not expected:
         return False
 
-    if expected in actual or actual in expected:
+    accepted_sections = [expected, *SECTION_ALIASES.get(expected, [])]
+
+    if any(accepted in actual or actual in accepted for accepted in accepted_sections):
         return True
 
-    return SequenceMatcher(None, actual, expected).ratio() >= 0.8
+    return any(
+        SequenceMatcher(None, actual, accepted).ratio() >= 0.8
+        for accepted in accepted_sections
+    )
 
 
 def keyword_matches(text: str, expected_keywords: list[Any]) -> bool:
@@ -354,11 +458,12 @@ def keyword_matches(text: str, expected_keywords: list[Any]) -> bool:
 
     normalized_text = normalize_text(text)
 
-    return any(
-        normalize_text(keyword) in normalized_text
-        for keyword in expected_keywords
-        if normalize_text(keyword)
-    )
+    for keyword in expected_keywords:
+        variants = [keyword, *KEYWORD_ALIASES.get(str(keyword), [])]
+        if any(normalize_text(variant) in normalized_text for variant in variants):
+            return True
+
+    return False
 
 
 def evaluate_retrieval_success(
@@ -411,13 +516,16 @@ def print_question_header(question_data: dict[str, Any]) -> None:
     print("=" * 90)
 
 
-def print_retrieval_success(success: bool) -> None:
+def print_retrieval_success(success: bool, failure_types: list[str] | None = None) -> None:
     """
     印出單題 retrieval scoring 結果。
     """
 
     status = "PASS" if success else "FAIL"
     print(f"\nRetrieval Success: {status}")
+
+    if not success and failure_types:
+        print(f"Failure Types    : {', '.join(failure_types)}")
 
 
 def print_chunks(chunks: list[dict[str, Any]]) -> None:
@@ -489,9 +597,10 @@ def main() -> None:
             chunks = extract_chunks(result)
 
             print_chunks(chunks)
-            results.append(build_result_record(question_data, chunks))
+            result_record = build_result_record(question_data, chunks)
+            results.append(result_record)
             success = evaluate_retrieval_success(question_data, chunks)
-            print_retrieval_success(success)
+            print_retrieval_success(success, result_record["failure_types"])
 
             # 暫時保留 raw response 檢查功能。
             # 如果 chunks 一直抓不到，可以把下面這幾行取消註解。
