@@ -4,6 +4,9 @@ A backend-focused project for retrieving relevant information from U.S. public c
 
 This project currently focuses on the core workflow: fetching filings from SEC EDGAR, extracting cleaner text from filing HTML, splitting long documents into chunks, indexing/retrieving relevant passages, and optionally generating LLM-backed answers.
 
+Financial Report RAG Assistant 讓使用者能直接用一般問句查詢美國上市公司的年度與季度財報，如公司的「營運狀況」」「主要風險」與「財務表現」等相關問題。系統會自動取得並整理篇幅龐大的 SEC 財報，找出與問題最相關的內容，再產生清楚易讀的回答，同時附上原始財報段落，方便確認答案來源，降低 AI 回答缺乏依據的問題。
+專案使用 FastAPI 建立後端服務，搭配 Streamlit 實作前端使用者介面，並支援 Docker 執行。目前已完成財報資料取得、文件清理、章節辨識、內容切分（chunking）、向量檢索（embedding）、相關段落搜尋及有依據的回答生成等核心流程。
+
 ## Current Scope
 
 - Query company information by CIK
