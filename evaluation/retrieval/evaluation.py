@@ -356,7 +356,7 @@ def classify_failure_types(
 
     return list(dict.fromkeys(failure_types))
 
-
+'''
 def build_result_record(
     question_data: dict[str, Any],
     chunks: list[dict[str, Any]] | None = None,
@@ -386,6 +386,61 @@ def build_result_record(
         "expected_section": question_data.get("expected_section"),
         "expected_keywords": expected_keywords,
         "retrieval_success": section_found and bool(matched_keywords),
+        "matched_keywords": matched_keywords,
+        "section_found": section_found,
+        "failure_types": classify_failure_types(
+            question_data,
+            chunks,
+            matched_keywords,
+            section_found,
+        ),
+        "failure_type_descriptions": FAILURE_TYPE_DESCRIPTIONS,
+        "top_chunks": build_top_chunks(chunks),
+    }
+'''
+
+def build_result_record(
+    question_data: dict[str, Any],
+    chunks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """
+    建立單題 retrieval evaluation result。
+
+    retrieval_success 的判定規則：
+    Top K 中至少有一個 chunk 同時符合：
+    1. expected section
+    2. 至少一個 expected keyword 或 alias
+    """
+
+    if chunks is None:
+        chunks = []
+
+    expected_keywords = question_data.get("expected_keywords", [])
+
+    matched_keywords = find_matched_keywords(
+        chunks,
+        expected_keywords,
+    )
+
+    section_found = is_expected_section_found(
+        chunks,
+        question_data.get("expected_section"),
+    )
+
+    # 統一使用同一套嚴格判定邏輯
+    retrieval_success = evaluate_retrieval_success(
+        question_data,
+        chunks,
+    )
+
+    return {
+        "id": question_data.get("id"),
+        "language": question_data.get("language"),
+        "category": question_data.get("category"),
+        "question": question_data.get("question"),
+        "expected_section": question_data.get("expected_section"),
+        "expected_keywords": expected_keywords,
+        "retrieval_success": retrieval_success,
         "matched_keywords": matched_keywords,
         "section_found": section_found,
         "failure_types": classify_failure_types(
@@ -472,6 +527,10 @@ def evaluate_retrieval_success(
 ) -> bool:
     """
     評估 Top K chunks 是否命中預期 section，且包含任一預期 keyword。
+
+    PASS 條件：
+    Top K 中至少有一個 chunk 同時符合 expected section，
+    並包含至少一個 expected keyword 或 alias。
     """
 
     expected_section = question_data.get("expected_section")
@@ -487,12 +546,19 @@ def evaluate_retrieval_success(
         chunk_section = get_chunk_section(chunk)
         chunk_text = get_chunk_text(chunk)
 
-        if section_matches(chunk_section, expected_section) and keyword_matches(
+        section_matched = section_matches(
+            chunk_section,
+            expected_section,
+        )
+
+        keyword_matched = keyword_matches(
             chunk_text,
             expected_keywords,
-        ):
-            return True
+        )
 
+        if section_matched and keyword_matched:
+            return True
+        
     return False
 
 
@@ -597,10 +663,15 @@ def main() -> None:
             chunks = extract_chunks(result)
 
             print_chunks(chunks)
+            
             result_record = build_result_record(question_data, chunks)
             results.append(result_record)
-            success = evaluate_retrieval_success(question_data, chunks)
-            print_retrieval_success(success, result_record["failure_types"])
+            success = result_record["retrieval_success"]
+
+            print_retrieval_success(
+                success,
+                result_record["failure_types"],
+            )
 
             # 暫時保留 raw response 檢查功能。
             # 如果 chunks 一直抓不到，可以把下面這幾行取消註解。
