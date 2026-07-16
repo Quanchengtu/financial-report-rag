@@ -1,4 +1,6 @@
 import os
+from html import escape
+
 import requests
 import streamlit as st
 
@@ -10,18 +12,96 @@ COMPANY_OPTIONS = {
     "Microsoft (MSFT)": {"cik": "789019", "ticker": "MSFT"},
 }
 
-st.set_page_config(page_title="Financial Report RAG Demo", page_icon="📊", layout="wide")
-st.title("📊 Financial Report Q&A Demo")
-st.caption("Select company + filing type, ask in Chinese or English, and review grounded evidence chunks.")
+st.set_page_config(
+    page_title="Financial Report RAG Demo", page_icon="📊", layout="wide"
+)
+st.markdown(
+    """
+    <style>
+        .hero-card {
+            padding: 1.4rem 1.6rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #2563eb 100%);
+            color: white;
+            margin-bottom: 1.25rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+        }
+        .hero-card h1 {
+            color: white;
+            margin: 0 0 0.35rem 0;
+            font-size: 2rem;
+        }
+        .hero-card p {
+            color: rgba(255, 255, 255, 0.86);
+            margin: 0;
+            font-size: 1rem;
+        }
+        .section-note {
+            color: #64748b;
+            font-size: 0.92rem;
+            margin-bottom: 0.75rem;
+        }
+        .answer-card {
+            padding: 1.1rem 1.25rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.9rem;
+            background: #f8fafc;
+            margin-bottom: 1rem;
+        }
+        .source-card {
+            padding: 1rem 1.15rem;
+            border: 1px solid #e5e7eb;
+            border-left: 4px solid #2563eb;
+            border-radius: 0.85rem;
+            background: #ffffff;
+            margin-bottom: 0.8rem;
+        }
+        .source-title {
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.45rem;
+        }
+        .muted-meta {
+            color: #64748b;
+            font-size: 0.82rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+    <div class="hero-card">
+        <h1>📊 Financial Report Q&A Demo</h1>
+        <p>Select a company and filing, ask in Chinese or English, then review the answer with grounded evidence.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
-    st.header("Settings")
-    top_k = st.slider("Top-k evidence", min_value=1, max_value=8, value=4)
-    max_sentences = st.slider("Answer sentence limit", min_value=1, max_value=8, value=4)
+    st.header("Analysis Settings")
+    st.caption(
+        "These controls keep the original RAG behavior, but use friendlier labels."
+    )
+    with st.expander("Advanced retrieval settings", expanded=False):
+        top_k = st.slider(
+            "Evidence depth",
+            min_value=1,
+            max_value=8,
+            value=4,
+            help="How many evidence chunks the system should retrieve before answering.",
+        )
+        max_sentences = st.slider(
+            "Answer length",
+            min_value=1,
+            max_value=8,
+            value=4,
+            help="Maximum number of supporting sentences used to keep the answer concise.",
+        )
 
 company_label = st.selectbox("Company", list(COMPANY_OPTIONS.keys()))
 form_type = st.radio("Filing Type", options=["10-K", "10-Q"], horizontal=True)
-question = st.text_area("Your Question (中文 / English)", placeholder="e.g., What are the major risk factors?")
+question = st.text_area(
+    "Your Question (中文 / English)",
+    placeholder="e.g., What are the major risk factors?",
+)
 
 
 def fetch_recent_filings(cik: str):
@@ -50,6 +130,7 @@ def ask_question(cik: str, filing: dict, question_text: str):
     resp.raise_for_status()
     return resp.json()
 
+
 def has_semantic_results(result: dict) -> bool | None:
     """Return whether the hybrid response reports semantic/vector matches, if available."""
     semantic_matched_count = result.get("semantic_matched_count")
@@ -67,8 +148,6 @@ def has_semantic_results(result: dict) -> bool | None:
 
 
 def show_retrieval_behavior(result: dict):
-    st.subheader("Retrieval Behavior")
-
     behavior_fields = {
         "mode": result.get("mode"),
         "fallback_used": result.get("fallback_used"),
@@ -79,7 +158,15 @@ def show_retrieval_behavior(result: dict):
         "index_status": result.get("index_status") or {},
         "used_priority_sections": result.get("used_priority_sections") or [],
     }
-    st.json(behavior_fields)
+    mode = behavior_fields["mode"] or "N/A"
+    model = behavior_fields["model"] or "N/A"
+    fallback_used = behavior_fields["fallback_used"]
+    st.caption(
+        f"Retrieval status: mode={mode} | model={model} | fallback_used={fallback_used}"
+    )
+
+    with st.expander("Advanced retrieval diagnostics", expanded=False):
+        st.json(behavior_fields)
 
     if has_semantic_results(result) is False:
         st.warning(
@@ -87,7 +174,6 @@ def show_retrieval_behavior(result: dict):
             "Hybrid retrieval is using rule-based fallback results only; index the filing in the vector store "
             "to enable semantic retrieval."
         )
-
 
 
 if st.button("Load Filings"):
@@ -126,7 +212,14 @@ if filings:
                     )
 
                 st.subheader("Answer")
-                st.write(result.get("answer", "No answer generated."))
+                st.markdown(
+                    f"""
+                    <div class="answer-card">
+                        {escape(str(result.get("answer") or "No answer generated."))}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
                 show_retrieval_behavior(result)
 
@@ -136,14 +229,20 @@ if filings:
                 fallback_reason = result.get("fallback_reason") or "None"
 
                 st.caption(
-                    " | ".join([
-                        f"fallback_used={fallback_used}",
-                        f"mode={mode}",
-                        f"model={model}",
-                        f"fallback_reason={fallback_reason}",
-                    ])
+                    " | ".join(
+                        [
+                            f"fallback_used={fallback_used}",
+                            f"mode={mode}",
+                            f"model={model}",
+                            f"fallback_reason={fallback_reason}",
+                        ]
+                    )
                 )
                 st.subheader("Summary")
+                st.markdown(
+                    '<div class="section-note">A short preview of the generated summary answer.</div>',
+                    unsafe_allow_html=True,
+                )
                 # summary = result.get("answer", "")
                 summary = result.get("summary_answer", "")
                 st.write(summary[:300] + ("..." if len(summary) > 300 else ""))
@@ -151,18 +250,29 @@ if filings:
                 #     f"mode={result.get('mode')} | fallback_used={result.get('fallback_used')} | model={result.get('model') or 'N/A'}"
                 # )
 
-
                 st.subheader("Evidence")
+                st.markdown(
+                    '<div class="section-note">Grounded sentences or source chunks used to support the answer.</div>',
+                    unsafe_allow_html=True,
+                )
                 supporting_sentences = result.get("supporting_sentences", [])
 
                 sources = result.get("sources", [])
                 if supporting_sentences:
                     for idx, item in enumerate(supporting_sentences, start=1):
-                        with st.expander(f"Evidence #{idx} | section: {item.get('section_name') or 'N/A'}"):
-                            st.write(item.get("sentence", ""))
-                            st.caption(
-                                f"chunk_index={item.get('chunk_index')} | chunk_rank={item.get('chunk_rank')} | sentence_score={item.get('sentence_score')}"
-                            )
+                        section_name = item.get("section_name") or "N/A"
+                        st.markdown(
+                            f"""
+                            <div class="source-card">
+                                <div class="source-title">Evidence #{idx} · {section_name}</div>
+                                <div>{escape(str(item.get("sentence") or ""))}</div>
+                                <div class="muted-meta">
+                                    chunk_index={item.get("chunk_index")} · chunk_rank={item.get("chunk_rank")} · sentence_score={item.get("sentence_score")}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                 elif sources:
                     st.info(
                         "No sentence-level evidence was returned; showing retrieved source chunks instead."
@@ -170,12 +280,18 @@ if filings:
                     for idx, source in enumerate(sources, start=1):
                         source_rank = source.get("source_rank", idx)
                         section_name = source.get("section_name") or "N/A"
-                        with st.expander(f"Source #{source_rank} | section: {section_name}"):
-                            st.write(source.get("text_excerpt", ""))
-                            st.caption(
-                                f"source_rank={source_rank} | section_name={section_name} | "
-                                f"chunk_index={source.get('chunk_index')} | score={source.get('score')}"
-                            )
+                        st.markdown(
+                            f"""
+                            <div class="source-card">
+                                <div class="source-title">Source #{source_rank} · {section_name}</div>
+                                <div>{escape(str(source.get("text_excerpt") or ""))}</div>
+                                <div class="muted-meta">
+                                    source_rank={source_rank} · chunk_index={source.get("chunk_index")} · score={source.get("score")}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                 else:
                     st.info("No supporting sentences were returned.")
 
