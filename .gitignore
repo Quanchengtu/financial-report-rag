@@ -35,3 +35,6 @@ node_modules/
 chroma_db/ 
 
 evaluation/results/*.json
+
+# Retrieval evaluation generated results
+evaluation/retrieval/results/
